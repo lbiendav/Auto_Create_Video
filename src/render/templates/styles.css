@@ -1,6 +1,9 @@
 /* ============================================================
-   CYBERPUNK NEON TECH VISUAL SYSTEM — 9:16 (1080×1920)
-   Sắc cạnh, chữ Monospace, viền Neon và lưới quét ma trận cường độ cao
+   CYBERPUNK NEON BROADCAST SYSTEM — 9:16 (1080×1920)
+   Khung tin tức viral: ambient nền, breaking bar, ticker chạy,
+   progress bar, phụ đề karaoke, chart giá crypto.
+   Mọi chuyển động THEO THỜI GIAN đi qua GSAP timeline
+   (HyperFrames scrub từng frame) — CSS chỉ giữ trạng thái tĩnh.
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
 
@@ -17,14 +20,37 @@ html, body {
 /* BẮT BUỘC: Giữ nguyên để khớp với cơ chế đánh dấu opacity của HyperFrames */
 .scene { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
 
-/* ── LAYOUT NỀN MA TRẬN ───────────────────────────── */
-.shell-bg {
+/* ── SHELL: LỚP NỀN ───────────────────────────────────────── */
+.shell-bg { position: absolute; inset: 0; z-index: 0; background: #030712; }
+
+/* Ảnh bài báo đã pre-blur (ffmpeg) làm nền ambient cho toàn video */
+.shell-ambient {
+  position: absolute; inset: -6%; z-index: 0;
+  background-size: cover; background-position: center;
+  opacity: 0.5; filter: saturate(1.35) brightness(0.8);
+  will-change: transform;
+}
+
+/* Fallback khi không có ảnh: 2 khối neon trôi chậm (GSAP điều khiển) */
+.shell-blob {
+  position: absolute; width: 900px; height: 900px; z-index: 0;
+  border-radius: 50%; filter: blur(10px); opacity: 0.5; will-change: transform;
+}
+.shell-blob.blob-a { top: -220px; left: -260px; background: radial-gradient(circle, rgba(255,0,85,0.30) 0%, transparent 65%); }
+.shell-blob.blob-b { bottom: -180px; right: -300px; background: radial-gradient(circle, rgba(0,255,204,0.24) 0%, transparent 65%); }
+
+.shell-grid {
   position: absolute; inset: 0; z-index: 0;
-  background: #030712;
   background-image:
           linear-gradient(rgba(0, 255, 204, 0.03) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0, 255, 204, 0.03) 1px, transparent 1px);
   background-size: 50px 50px;
+}
+
+/* Vignette tạo chiều sâu, đẩy mắt vào giữa khung */
+.shell-vignette {
+  position: absolute; inset: 0; z-index: 45; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.55) 100%);
 }
 
 /* ── HIỆU ỨNG NHIỄU CRT ───────────── */
@@ -43,10 +69,10 @@ html, body {
   animation: hf-grain-noise 0.2s steps(1) infinite;
 }
 
-/* ── CẤU TRÚC HEADER / FOOTER PERSISTENT SHELL ───────────────── */
+/* ── HEADER THƯƠNG HIỆU ───────────────── */
 .brand-shell-header {
   position: absolute;
-  top: 120px; /* Đã tăng từ 60px lên 120px để đẩy lùi xuống vùng an toàn tránh dính vào khung tìm kiếm TikTok */
+  top: 120px; /* vùng an toàn tránh khung tìm kiếm TikTok */
   left: 60px;
   display: flex;
   align-items: center;
@@ -68,89 +94,205 @@ html, body {
 
 .brand-tag { font-size: 22px; font-weight: 700; color: #ff0055; letter-spacing: 3px; }
 
+/* ── BREAKING BAR: TRỰC TIẾP + NGÀY ───────────────────────── */
+.shell-breaking {
+  position: absolute; top: 132px; right: 60px; z-index: 50;
+  display: flex; align-items: center; gap: 16px;
+  background: #12040a; border: 2px solid #ff0055; padding: 14px 24px;
+  box-shadow: 5px 5px 0px rgba(255,0,85,0.35);
+}
+.live-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ff2244; box-shadow: 0 0 16px #ff2244;
+}
+.breaking-text { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 3px; }
+.breaking-date { font-size: 26px; font-weight: 700; color: #00ffcc; }
+
+/* ── HANDLE BADGE (dời lên trên ticker) ───────────────────── */
 .brand-shell-handle {
-  position: absolute; bottom: 200px; right: 60px; display: flex; align-items: center; gap: 14px;
+  position: absolute; bottom: 250px; right: 60px; display: flex; align-items: center; gap: 14px;
   background: #000; border: 2px solid #ff0055; border-radius: 0px; padding: 16px 32px; z-index: 50;
   box-shadow: 5px 5px 0px rgba(255,0,85,0.4);
 }
 .handle-music { font-size: 30px; color: #00ffcc; }
 .handle-text { font-size: 28px; font-weight: 700; color: #fff; }
 
-.brand-shell-keyword {
-  position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
-  background: #000; border: 2px solid #00ffcc; border-radius: 0px; padding: 12px 36px; z-index: 50;
+/* ── PROGRESS BAR (retention driver) ──────────────────────── */
+.shell-progress {
+  position: absolute; left: 0; right: 0; bottom: 96px; height: 10px;
+  background: rgba(255,255,255,0.10); z-index: 56;
 }
-.brand-shell-keyword span { font-size: 26px; font-weight: 700; color: #00ffcc; letter-spacing: 2px; }
+.progress-fill {
+  height: 100%; width: 100%;
+  transform: scaleX(0); transform-origin: left center;
+  background: linear-gradient(90deg, #ff0055 0%, #ffd600 55%, #00ffcc 100%);
+  box-shadow: 0 0 14px rgba(255, 0, 85, 0.7);
+  will-change: transform;
+}
 
-/* ── HÌNH NỀN VÀ GRADIENT LỚP PHỦ ─────────────────────────────────── */
-.bg { position: absolute; inset: 0; background-size: cover; background-position: center; z-index: 1; filter: saturate(1.2) contrast(1.1); }
-.bg.kb-zoom-in    { animation: kb-zoom-in    var(--scene-dur) linear forwards; }
-.bg.kb-zoom-out   { animation: kb-zoom-out   var(--scene-dur) linear forwards; }
-.bg.kb-pan-left   { animation: kb-pan-left   var(--scene-dur) linear forwards; }
-.bg.kb-pan-right  { animation: kb-pan-right  var(--scene-dur) linear forwards; }
+/* ── NEWS TICKER (dải tin chạy đáy màn hình) ──────────────── */
+.shell-ticker {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 96px; z-index: 55;
+  display: flex; align-items: stretch;
+  background: #05060e; border-top: 3px solid #ff0055;
+}
+.ticker-label {
+  display: flex; align-items: center; padding: 0 30px; flex-shrink: 0;
+  background: #ff0055; color: #fff;
+  font-family: 'Orbitron', sans-serif; font-size: 30px; font-weight: 900;
+  letter-spacing: 2px; white-space: nowrap;
+}
+.ticker-viewport { flex: 1; overflow: hidden; display: flex; align-items: center; }
+.ticker-track { display: flex; white-space: nowrap; will-change: transform; }
+.ticker-group { display: inline-flex; align-items: center; }
+.ticker-item { font-size: 30px; font-weight: 700; color: #e8ecf8; padding: 0 26px; }
+.ticker-sep { font-size: 22px; color: #00ffcc; }
+.ticker-domain {
+  display: flex; align-items: center; padding: 0 26px; flex-shrink: 0;
+  border-left: 2px solid rgba(0,255,204,0.4);
+  font-size: 26px; font-weight: 700; color: #00ffcc; white-space: nowrap;
+}
 
-@keyframes kb-zoom-in   { from { transform: scale(1.0); } to { transform: scale(1.15); } }
-@keyframes kb-zoom-out  { from { transform: scale(1.15); } to { transform: scale(1.0); } }
-@keyframes kb-pan-left  { from { transform: scale(1.1) translateX(3%); } to { transform: scale(1.1) translateX(-3%); } }
-@keyframes kb-pan-right { from { transform: scale(1.1) translateX(-3%); } to { transform: scale(1.1) translateX(3%); } }
+/* ── FLASH CHUYỂN CẢNH (GSAP bật/tắt) ─────────────────────── */
+.fx-flash {
+  position: absolute; inset: 0; z-index: 90; pointer-events: none; opacity: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(0,255,204,0.85) 100%);
+  will-change: opacity;
+}
 
+/* ── PHỤ ĐỀ KARAOKE (viral CapCut style) ──────────────────── */
+.caps {
+  position: absolute; left: 50%; bottom: 420px; z-index: 40;
+  width: 940px; transform: translateX(-50%);
+  display: grid; justify-items: center; align-items: end;
+}
+.cap-chunk {
+  grid-area: 1 / 1; /* các chunk chồng lên nhau, GSAP bật từng chunk */
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 6px 20px; opacity: 0; will-change: transform, opacity;
+}
+.cap-word {
+  display: inline-block;
+  font-family: 'Inter', 'Arial', sans-serif;
+  font-weight: 900; font-size: 62px; line-height: 1.2;
+  color: #ffffff; opacity: 0.3;
+  padding: 4px 16px; border-radius: 14px;
+  text-shadow: 0 5px 22px rgba(0,0,0,0.95), 0 2px 4px rgba(0,0,0,0.9);
+  will-change: transform, opacity;
+}
+
+/* ── SHIMMER SWEEP (dải sáng quét qua chữ — GSAP kéo x) ───── */
+.shimmer-sweep-target { position: relative; overflow: hidden; }
+.shimmer-sweep-target .shimmer-mask {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,0.45) 50%, transparent 68%);
+  mix-blend-mode: screen;
+}
+
+/* ── HÌNH NỀN SCENE ───────────────────────────────────────── */
+/* Ken Burns giờ do GSAP điều khiển qua data-kb (CSS animation cũ chạy
+   theo đồng hồ toàn cục nên sai pha với scene giữa video). */
+.bg {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  z-index: 1; filter: saturate(1.2) contrast(1.1); will-change: transform;
+}
 .bg.gradient-news-dark { background: linear-gradient(180deg, #060a17 0%, #020308 100%); }
 .bg.gradient-outro-purple { background: linear-gradient(135deg, #2b0452 0%, #030611 100%); }
 
-/* ĐÃ SỬA: Lớp phủ quét CRT mờ mượt, không dùng màu đen đặc z-index cao chắn hình nữa */
 .overlay {
   position: absolute; inset: 0; z-index: 2;
   background: rgba(0, 0, 0, 0.45);
   background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.04) 2px, rgba(0, 255, 255, 0.04) 4px);
 }
 
-/* ── LAYOUTS PHÂN BỔ CHI TIẾT THEO HTML COMPOSER ────────────────────────────────── */
+/* ── LAYOUTS ──────────────────────────────────────────────── */
+/* padding-bottom 480px chừa chỗ cho phụ đề karaoke + handle badge */
 .layout-hook {
   position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; padding: 200px 60px 300px; text-align: center;
+  align-items: center; justify-content: center; padding: 240px 60px 480px; text-align: center;
+  will-change: transform;
+}
+.hook-badge {
+  font-family: 'Orbitron', sans-serif; font-size: 42px; font-weight: 900;
+  color: #fff; background: #ff0055; padding: 14px 40px; letter-spacing: 6px;
+  box-shadow: 8px 8px 0px #000, 0 0 30px rgba(255,0,85,0.65);
+  transform: rotate(-3deg); margin-bottom: 46px; opacity: 0; will-change: transform, opacity;
 }
 .hook-headline {
-  font-family: 'Orbitron', sans-serif; font-size: 110px; font-weight: 900;
-  color: #fff; line-height: 1.1; text-shadow: 0 0 20px #ff0055, 4px 4px 0px #000;
-  background: rgba(0,0,0,0.85); padding: 30px; border: 3px solid #ff0055; width: 100%; opacity: 0;
+  font-family: 'Orbitron', sans-serif; font-size: 100px; font-weight: 900;
+  color: #fff; line-height: 1.15; text-shadow: 0 0 20px #ff0055, 4px 4px 0px #000;
+  background: rgba(0,0,0,0.85); padding: 34px; border: 3px solid #ff0055; width: 100%;
 }
+.hook-headline .hw { display: inline-block; opacity: 0; will-change: transform, opacity; }
 .hook-subhead {
-  font-size: 65px; font-weight: 700; color: #00ffcc; line-height: 1.2;
+  font-size: 60px; font-weight: 700; color: #00ffcc; line-height: 1.2;
   text-shadow: 0 0 15px rgba(0,255,204,0.6); margin-top: 40px;
   background: #000; padding: 15px 30px; border: 2px solid #00ffcc; opacity: 0;
 }
 
-.layout-comparison { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 220px 80px 300px; }
+.layout-comparison { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 240px 80px 480px; will-change: transform; }
 .cmp-card { width: 100%; background: #000; border-radius: 0px; padding: 50px 60px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; opacity: 0; }
 .cmp-card.color-cyan  { border: 3px solid #00ffcc; box-shadow: 6px 6px 0px rgba(0,255,204,0.2); }
 .cmp-card.color-purple { border: 3px solid #ff0055; box-shadow: 6px 6px 0px rgba(255,0,85,0.2); }
 .cmp-label { font-size: 36px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 2px; }
-.cmp-value { font-family: 'Orbitron', sans-serif; font-size: 90px; font-weight: 900; color: #fff; line-height: 1.0; }
+.cmp-value { font-family: 'Orbitron', sans-serif; font-size: 84px; font-weight: 900; color: #fff; line-height: 1.0; }
 .cmp-card.color-cyan  .cmp-value { color: #00ffcc; text-shadow: 0 0 10px rgba(0,255,204,0.4); }
 .cmp-card.color-purple .cmp-value { color: #ff0055; text-shadow: 0 0 10px rgba(255,0,85,0.4); }
 .cmp-winner-badge { font-size: 26px; font-weight: 900; color: #000; background: #00ffcc; padding: 6px 20px; letter-spacing: 2px; }
-.cmp-vs { font-family: 'Orbitron', sans-serif; font-size: 90px; font-weight: 900; color: #ff0055; text-shadow: 0 0 15px #ff0055; margin: 24px 0; opacity: 0; }
+.cmp-vs { font-family: 'Orbitron', sans-serif; font-size: 84px; font-weight: 900; color: #ff0055; text-shadow: 0 0 15px #ff0055; margin: 20px 0; opacity: 0; }
 
-.layout-stat-hero { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 220px 60px 300px; text-align: center; gap: 30px; }
-.stat-value { font-family: 'Orbitron', sans-serif; font-size: 160px; font-weight: 900; color: #fff; line-height: 1.0; background: #000; border: 4px dashed #00ffcc; padding: 20px 50px; text-shadow: 0 0 30px #00ffcc; opacity: 0; }
-.stat-label { font-size: 56px; font-weight: 700; color: #fff; line-height: 1.3; background: rgba(0,0,0,0.85); padding: 15px 30px; border-left: 8px solid #ff0055; opacity: 0; }
+.layout-stat-hero { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 240px 60px 480px; text-align: center; gap: 30px; will-change: transform; }
+.stat-value { font-family: 'Orbitron', sans-serif; font-size: 150px; font-weight: 900; color: #fff; line-height: 1.0; background: #000; border: 4px dashed #00ffcc; padding: 20px 50px; text-shadow: 0 0 30px #00ffcc; opacity: 0; }
+.stat-label { font-size: 54px; font-weight: 700; color: #fff; line-height: 1.3; background: rgba(0,0,0,0.85); padding: 15px 30px; border-left: 8px solid #ff0055; opacity: 0; }
 .stat-context { font-size: 38px; font-weight: 700; color: #00ffcc; background: #000; border: 2px solid #00ffcc; padding: 12px 40px; opacity: 0; }
 
-.layout-feature-list { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 220px 60px 300px; }
-.feat-card { width: 100%; background: #000; border: 3px solid #ff0055; border-radius: 0px; padding: 60px 50px; box-shadow: 8px 8px 0px rgba(255,0,85,0.15); opacity: 0; }
-.feat-title { font-family: 'Orbitron', sans-serif; font-size: 54px; font-weight: 900; color: #ff0055; text-shadow: 0 0 10px rgba(255,0,85,0.3); }
-.feat-rule { height: 4px; background: #ff0055; margin: 30px 0; opacity: 0; }
-.feat-bullets { display: flex; flex-direction: column; gap: 30px; }
+.layout-feature-list { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 240px 60px 480px; will-change: transform; }
+.feat-card { width: 100%; background: #000; border: 3px solid #ff0055; border-radius: 0px; padding: 56px 50px; box-shadow: 8px 8px 0px rgba(255,0,85,0.15); opacity: 0; }
+.feat-title { font-family: 'Orbitron', sans-serif; font-size: 52px; font-weight: 900; color: #ff0055; text-shadow: 0 0 10px rgba(255,0,85,0.3); }
+.feat-rule { height: 4px; background: #ff0055; margin: 28px 0; opacity: 0; transform-origin: left center; }
+.feat-bullets { display: flex; flex-direction: column; gap: 28px; }
 .feat-bullet { display: flex; align-items: center; gap: 24px; opacity: 0; }
 .feat-dot { width: 24px; height: 24px; flex-shrink: 0; background: #00ffcc; border-radius: 0px; box-shadow: 0 0 10px #00ffcc; }
-.feat-text { font-size: 44px; font-weight: 700; color: #fff; line-height: 1.2; }
+.feat-text { font-size: 42px; font-weight: 700; color: #fff; line-height: 1.2; }
 
-.layout-callout { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 220px 60px 300px; }
-.callout-card { width: 100%; background: #000; border: 3px solid #00ffcc; padding: 60px; box-shadow: 8px 8px 0px rgba(0,255,204,0.15); opacity: 0; border-left: 15px solid #00ffcc; }
-.callout-tag { display: inline-block; font-size: 30px; font-weight: 700; color: #000; background: #00ffcc; padding: 8px 24px; margin-bottom: 36px; }
-.callout-statement { font-size: 54px; font-weight: 700; color: #fff; line-height: 1.4; }
+.layout-callout { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 240px 60px 480px; will-change: transform; }
+.callout-card { width: 100%; background: #000; border: 3px solid #00ffcc; padding: 56px; box-shadow: 8px 8px 0px rgba(0,255,204,0.15); opacity: 0; border-left: 15px solid #00ffcc; }
+.callout-tag { display: inline-block; font-size: 30px; font-weight: 700; color: #000; background: #00ffcc; padding: 8px 24px; margin-bottom: 32px; }
+.callout-statement { font-size: 52px; font-weight: 700; color: #fff; line-height: 1.4; }
 
-.layout-outro { position: absolute; inset: 0; z-index: 5; background: #030611; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 220px 60px 300px; text-align: center; }
+/* ── CHART (giá crypto) ───────────────────────────────────── */
+.layout-chart { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 240px 60px 480px; will-change: transform; }
+.chart-card {
+  width: 100%; background: #000; padding: 56px 44px; opacity: 0;
+  border: 3px solid #00ffcc; box-shadow: 8px 8px 0px rgba(0,255,204,0.15);
+}
+.layout-chart[data-trend="down"] .chart-card { border-color: #ff0055; box-shadow: 8px 8px 0px rgba(255,0,85,0.15); }
+.chart-title { font-family: 'Orbitron', sans-serif; font-size: 50px; font-weight: 900; color: #fff; margin-bottom: 36px; }
+.chart-svg-wrap { position: relative; width: 100%; }
+.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-grid { stroke: rgba(255,255,255,0.12); stroke-width: 2; stroke-dasharray: 8 10; transform-origin: left center; }
+.chart-line {
+  fill: none; stroke: #00ffcc; stroke-width: 7;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px rgba(0,255,204,0.8));
+}
+.chart-area { fill: rgba(0,255,204,0.16); opacity: 0; }
+.chart-dot { fill: #00ffcc; filter: drop-shadow(0 0 12px rgba(0,255,204,0.9)); opacity: 0; }
+.layout-chart[data-trend="down"] .chart-line { stroke: #ff2255; filter: drop-shadow(0 0 10px rgba(255,0,85,0.8)); }
+.layout-chart[data-trend="down"] .chart-area { fill: rgba(255,0,85,0.15); }
+.layout-chart[data-trend="down"] .chart-dot { fill: #ff2255; filter: drop-shadow(0 0 12px rgba(255,0,85,0.9)); }
+.chart-badge {
+  position: absolute; transform: translate(-110%, -140%);
+  font-family: 'Orbitron', sans-serif; font-size: 40px; font-weight: 900;
+  color: #000; background: #00ffcc; padding: 8px 22px; white-space: nowrap;
+  box-shadow: 5px 5px 0px #000; opacity: 0; will-change: transform, opacity;
+}
+.layout-chart[data-trend="down"] .chart-badge { background: #ff2255; color: #fff; }
+.chart-label { font-size: 34px; font-weight: 700; color: rgba(255,255,255,0.65); margin-top: 30px; letter-spacing: 2px; }
+
+/* ── OUTRO ────────────────────────────────────────────────── */
+.layout-outro { position: absolute; inset: 0; z-index: 5; background: rgba(3,6,17,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 240px 60px 480px; text-align: center; will-change: transform; }
 .out-cta-top { font-size: 46px; font-weight: 700; color: #00ffcc; border: 2px solid #00ffcc; padding: 16px 48px; margin-bottom: 60px; opacity: 0; background: #000; }
 .out-channel { font-family: 'Orbitron', sans-serif; font-size: 90px; font-weight: 900; color: #ff0055; line-height: 1.1; text-shadow: 0 0 20px rgba(255,0,85,0.5); opacity: 0; }
 .out-underline { height: 6px; background: #ff0055; width: 0; margin: 30px auto; }
@@ -162,7 +304,7 @@ html, body {
 
 /* ── TIKTOK FOLLOW CARD ────────────────────────────────── */
 .tt-card {
-  position: absolute; bottom: 360px; left: 50%; transform: translate(-50%, 300px);
+  position: absolute; bottom: 420px; left: 50%; transform: translate(-50%, 300px);
   display: flex; align-items: center; gap: 24px; background: #000; border: 3px solid #00ffcc;
   border-radius: 0px; padding: 25px; box-shadow: 8px 8px 0px rgba(0,255,204,0.2); opacity: 0; z-index: 60;
 }
@@ -183,7 +325,7 @@ html, body {
   justify-content: center;
   overflow: hidden;
 }
-/* ĐÃ SỬA: Cố định vị trí absolute chồng lên nhau, ngăn chữ Follow và Following xô đẩy làm vỡ card */
+/* Cố định vị trí absolute chồng lên nhau, ngăn chữ Follow và Following xô đẩy làm vỡ card */
 .tt-btn-text {
   position: absolute;
   left: 50%;

@@ -6,10 +6,12 @@ import { ScriptSchema, type Script } from "./render/script-schema.js";
 import { loadConfig } from "./config.js";
 import { createTtsClient } from "./tts/tts-client.js";
 import { fetchImage } from "./assets/image-fetcher.js";
-import { getDurationSec, concatWithSilence, mixSfxOntoVoice, type SfxMixSpec } from "./assets/audio-tools.js";
+import { getDurationSec, concatWithSilence, mixSfxOntoVoice, mixMusicOntoVoice, type SfxMixSpec } from "./assets/audio-tools.js";
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "./assets/sfx-selector.js";
-import { existsSync } from "node:fs";
+import { pickMusic } from "./assets/music-selector.js";
+import { existsSync, readFileSync } from "node:fs";
 import { composeHtml } from "./render/html-composer.js";
+import { buildCaptionChunks, type CaptionChunk } from "./render/captions.js";
 import { renderWithHyperframes } from "./render/hyperframes-runner.js";
 import { log } from "./utils/logger.js";
 import { execSync } from "node:child_process"; // Tích hợp bộ gọi lệnh hệ thống
@@ -31,6 +33,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const TPL_DIR = join(__dirname, "render", "templates");
 /** Path to the SFX library (relative to project root) */
 const SFX_DIR = join(__dirname, "..", "assets", "sfx");
+/** Path to the music-bed library (relative to project root) */
+const MUSIC_DIR = join(__dirname, "..", "assets", "music");
 
 const HYPERFRAMES_CONFIG = {
   $schema: "https://hyperframes.heygen.com/schema/hyperframes.json",
@@ -102,8 +106,20 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   ]);
 
   let bgImageRelPath: string | null = null;
+  let ambientImageRelPath: string | null = null;
   if (imgResult.success) {
     bgImageRelPath = "images/bg.jpg";
+    // Pre-blur ambient background with ffmpeg (blur in CSS per-frame is slow)
+    try {
+      const blurPath = join(outputDir, "images", "bg-blur.jpg");
+      execSync(
+        `ffmpeg -y -i "${imgPath}" -vf "scale=540:-2,gblur=sigma=24,eq=brightness=-0.08:saturation=1.3" -q:v 4 "${blurPath}"`,
+        { stdio: "ignore" },
+      );
+      ambientImageRelPath = "images/bg-blur.jpg";
+    } catch (err) {
+      log.warn(`  ambient blur failed (${err}) — continuing without ambient image`);
+    }
   } else {
     log.warn(`Background image fetch failed: ${imgResult.reason} → using gradient fallback`);
   }
@@ -207,6 +223,25 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   }
   // ───────────────────────────────────────────────────────────────────────────
 
+  // STEP 5c — Music bed (looped, ducked under voice via sidechain compression)
+  if (cfg.music.enabled && script.music?.name !== "none") {
+    const pick = pickMusic({
+      musicDir: MUSIC_DIR,
+      seed: script.metadata.title,
+      explicitName: script.music?.name,
+      explicitFile: cfg.music.file,
+    });
+    if (pick) {
+      const vol = script.music?.volume ?? cfg.music.volume;
+      const withMusic = join(outputDir, "voice-music.mp3");
+      await mixMusicOntoVoice(voiceMp3, { path: pick.path, volume: vol }, withMusic);
+      renameSync(withMusic, voiceMp3);
+      log.info(`  music bed: ${pick.fileName} @ volume ${vol} (auto-duck under voice)`);
+    } else {
+      log.info("  music bed: no tracks in assets/music — skipped (drop royalty-free mp3 there to enable)");
+    }
+  }
+
   const totalAudioSec = await getDurationSec(voiceMp3);
   log.info(`  voice.mp3 total: ${totalAudioSec.toFixed(2)}s`);
   if (totalAudioSec < DURATION_MIN_SEC || totalAudioSec > DURATION_MAX_SEC) {
@@ -240,6 +275,22 @@ export async function runPipeline(scriptPath: string): Promise<void> {
     await copyFile(bundledAvatar, ttAvatarOut);
   }
 
+  // Karaoke captions: per-scene word timelines (SRT from TTS when available)
+  const captionsByScene: Record<string, CaptionChunk[]> = {};
+  for (const scene of script.scenes) {
+    const audio = sceneAudio.find((a) => a.id === scene.id);
+    if (!audio) continue;
+    const srtPath = join(voiceDir, `scene-${scene.id}.srt`);
+    const srtText = existsSync(srtPath) ? readFileSync(srtPath, "utf8") : null;
+    captionsByScene[scene.id] = buildCaptionChunks({
+      voiceText: scene.voiceText,
+      audioDurationSec: audio.durationSec,
+      srtText,
+    });
+  }
+  const srtCount = script.scenes.filter((s) => existsSync(join(voiceDir, `scene-${s.id}.srt`))).length;
+  log.info(`  captions: ${srtCount}/${script.scenes.length} scenes with SRT timing (rest estimated)`);
+
   const html = composeHtml({
     script,
     sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
@@ -249,6 +300,8 @@ export async function runPipeline(scriptPath: string): Promise<void> {
     tiktok: cfg.tiktok,
     tiktokAvatarRelPath: ttAvatarFile,
     outroHoldSec: OUTRO_HOLD_SEC,
+    ambientImageRelPath,
+    captionsByScene,
   });
 
   // hyperframes expects: index.html (NOT composition.html), hyperframes.json, meta.json in DIR

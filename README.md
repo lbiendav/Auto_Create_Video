@@ -98,6 +98,23 @@ Either way, after ~3–5 minutes you'll have `output/<slug>/video.mp4` — a 108
 
 ---
 
+## 🆕 v3 — Viral Broadcast Engine (2026-07)
+
+The renderer was rebuilt around what actually makes news shorts perform on TikTok/Shorts:
+
+| Upgrade | What it does |
+|---|---|
+| 🗣️ **Karaoke captions** | Word-by-word subtitles synced to the voice (SRT timing from TTS when available, char-weight estimation otherwise). Current word gets the yellow chip; numbers/negative/positive words auto-color gold/red/green. |
+| 📈 **`chart` template** | Self-drawing neon price chart (SVG stroke draw + pulsing endpoint + stamped change badge). Built for crypto price action. |
+| 🔴 **Broadcast shell** | Pulsing **TRỰC TIẾP** badge with date, scrolling bottom **news ticker** (script-driven via `ticker[]`), gradient **progress bar**, vignette. |
+| 🎞️ **Scene transitions** | Accent flash + zoom-punch on every scene change; Ken Burns now GSAP-driven (frame-accurate — the old CSS version desynced mid-video). |
+| 🔢 **Stat count-up** | `stat-hero` values with digits animate 0 → target ("52%", "126,080$"). |
+| 🎵 **Music bed + ducking** | Drop royalty-free tracks in `assets/music/` — auto-looped, faded, and side-chain ducked under the voice (see `assets/music/README.md`). |
+| 🌆 **Ambient background** | Article image pre-blurred by ffmpeg drifts behind ALL scenes (neon blobs fallback) — no more flat black body scenes. |
+| 💥 **Hook stamp** | "TIN NÓNG" (customizable `badge`) slams in + headline words stagger-slam. |
+
+All motion runs through the GSAP timeline that HyperFrames scrubs per frame — deterministic, no wall-clock drift.
+
 ## ✨ Features
 
 <table>

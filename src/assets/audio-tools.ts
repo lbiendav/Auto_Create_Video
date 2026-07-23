@@ -122,6 +122,58 @@ export async function concatWithSilence(
   }
 }
 
+export interface MusicMixSpec {
+  /** Absolute path to the music file (mp3/wav/m4a) */
+  path: string;
+  /** Music bed volume 0–1 BEFORE ducking (0.16 sits nicely under speech) */
+  volume: number;
+  fadeInSec?: number;
+  fadeOutSec?: number;
+}
+
+/**
+ * Mix a looping music bed under the voice with sidechain ducking:
+ * whenever the voice speaks, the music is compressed down automatically
+ * (the classic viral-news "music breathes between sentences" feel).
+ *
+ * - Music is looped (`-stream_loop -1`) and trimmed to the voice duration
+ * - `sidechaincompress` uses the voice as the sidechain key
+ * - Fade-in at start, fade-out into the outro
+ */
+export async function mixMusicOntoVoice(
+  voicePath: string,
+  music: MusicMixSpec,
+  outPath: string,
+): Promise<void> {
+  const dur = await getDurationSec(voicePath);
+  const fadeIn = music.fadeInSec ?? 1.0;
+  const fadeOut = music.fadeOutSec ?? 2.0;
+  const fadeOutStart = Math.max(0, dur - fadeOut);
+
+  const filter = [
+    // Voice: normalize + split (one copy to mix, one as sidechain key)
+    `[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,asplit=2[voice][sc]`,
+    // Music: normalize → trim to voice length → volume → fades
+    `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,` +
+      `atrim=0:${dur.toFixed(3)},asetpts=PTS-STARTPTS,volume=${music.volume},` +
+      `afade=t=in:st=0:d=${fadeIn},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeOut}[m]`,
+    // Duck music under speech (threshold ≈ -34dB, ratio 8:1, slow release)
+    `[m][sc]sidechaincompress=threshold=0.02:ratio=8:attack=50:release=650:makeup=1[duck]`,
+    `[voice][duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]`,
+  ].join(";");
+
+  await run("ffmpeg", [
+    "-y",
+    "-i", voicePath,
+    "-stream_loop", "-1", "-i", music.path,
+    "-filter_complex", filter,
+    "-map", "[out]",
+    "-t", dur.toFixed(3),
+    "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
+    outPath,
+  ]);
+}
+
 export interface SfxMixSpec {
   /** Absolute path to SFX mp3/wav file */
   path: string;

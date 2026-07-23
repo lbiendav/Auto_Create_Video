@@ -98,6 +98,23 @@ Cả 2 cách: sau ~3–5 phút bạn sẽ có `output/<slug>/video.mp4` — file
 
 ---
 
+## 🆕 v3 — Động cơ Broadcast Viral (07/2026)
+
+Renderer được nâng cấp toàn diện theo chuẩn video tin tức viral trên TikTok/Shorts:
+
+| Nâng cấp | Tác dụng |
+|---|---|
+| 🗣️ **Phụ đề karaoke** | Phụ đề nhảy theo TỪNG CHỮ khớp giọng đọc (lấy timing từ SRT của TTS, không có thì tự ước lượng). Chữ đang đọc có chip vàng; số / từ tiêu cực / từ tích cực tự tô vàng-đỏ-xanh. |
+| 📈 **Template `chart`** | Biểu đồ giá neon tự vẽ (đường chạy + chấm cuối nhấp nháy + con dấu %). Sinh ra cho tin giá crypto. |
+| 🔴 **Khung truyền hình** | Badge **TRỰC TIẾP** nhấp nháy kèm ngày, **ticker tin chạy** đáy màn hình (điều khiển qua `ticker[]`), **progress bar** gradient, vignette. |
+| 🎞️ **Chuyển cảnh** | Flash + zoom-punch mỗi lần đổi cảnh; Ken Burns chuyển sang GSAP (bản CSS cũ lệch pha giữa video). |
+| 🔢 **Số đếm chạy** | `stat-hero` có số sẽ đếm từ 0 → giá trị thật ("52%", "126,080$"). |
+| 🎵 **Nhạc nền + auto-duck** | Thả nhạc royalty-free vào `assets/music/` — tự loop, fade, và NÉN NHỎ khi giọng đọc nói (sidechain). Xem `assets/music/README.md`. |
+| 🌆 **Nền ambient** | Ảnh bài báo được ffmpeg làm mờ sẵn, trôi chậm phía sau MỌI cảnh (không ảnh thì có khối neon trôi). |
+| 💥 **Con dấu hook** | "TIN NÓNG" (đổi được qua `badge`) đập xuống + tiêu đề slam từng chữ. |
+
+Toàn bộ chuyển động đi qua GSAP timeline mà HyperFrames scrub từng frame — chính xác tuyệt đối, không trôi theo đồng hồ.
+
 ## ✨ Tính năng
 
 <table>

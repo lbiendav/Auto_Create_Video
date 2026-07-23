@@ -130,6 +130,64 @@ RIGHT (natural):
 - Must contain a claim, statistic, or curious question
 - NEVER generic ("Hôm nay chúng ta sẽ nói về..." is wrong)
 - ALWAYS include at least 1 effect: `flash-white-3f` or `particle-burst`
+- Optional `badge` field (max 14 chars): stamp slammed over the hook.
+  Default "TIN NÓNG". Match the story mood: `"ĐỘC QUYỀN"`, `"KHẨN CẤP"`, `"BREAKING"`, `"CẢNH BÁO"`.
+
+### Viral engine v3 — new fields you SHOULD use
+
+**Karaoke captions (automatic — no action needed):**
+Every scene gets word-by-word karaoke captions synced to the voice (CapCut viral
+style). The caption text IS the `voiceText`, so keep voiceText punchy — it's on
+screen. Number words (`52`, `126,080`), negative words (sụt, giảm, sập, cảnh báo,
+bán tháo...) and positive words (tăng, kỷ lục, lập đỉnh...) auto-highlight in
+gold/red/green. Sentence punctuation controls caption line breaks — end sentences
+with `.` or `?` and keep sentences short.
+
+**`chart` template (NEW — best template for crypto/price stories):**
+Use for any price action, market move, or metric-over-time. An animated neon
+line chart draws itself, with a pulsing endpoint and a stamped change badge.
+
+```json
+{
+  "id": "body-2", "type": "body",
+  "voiceText": "Chỉ trong bảy ngày, Bitcoin đã bốc hơi hơn mười hai phần trăm giá trị.",
+  "templateData": {
+    "template": "chart",
+    "title": "BITCOIN TUẦN QUA",
+    "points": [104200, 101800, 99500, 96400, 97100, 93800, 91200],
+    "label": "BTC / USD — 7 ngày",
+    "changeText": "-12.5%",
+    "trend": "down"
+  }
+}
+```
+- `points`: 4–60 raw numbers left→right (renderer normalizes scale). Use real
+  values from the article when available; otherwise a plausible shape matching
+  the story (e.g. steady decline for a crash story).
+- `trend`: `"down"` → red scheme, `"up"` → cyan/green scheme.
+- `changeText`: short stamp near the line end ("-52%", "126,080$").
+- Rule of thumb: if the story has price movement, include EXACTLY ONE chart scene.
+
+**`ticker` (root-level, optional but recommended):**
+Bottom news-ticker strip items (each ≤ 60 chars, max 8). Derived from
+title/domain/channel if omitted. Write 3–5 punchy ALL-CAPS fragments:
+
+```json
+"ticker": [
+  "BITCOIN THỦNG MỐC 91,000$",
+  "CÁ VOI BÁN THÁO 12,000 BTC",
+  "VÀNG LẬP ĐỈNH MỚI 5,500$",
+  "THEO DÕI MAI CRYPTO — TIN NÓNG 24/7"
+]
+```
+
+**`music` (root-level, optional):**
+Background bed auto-ducks under the voice. Omit → auto-pick from `assets/music/`
+(deterministic by title). `{ "name": "none" }` disables; `{ "volume": 0.2 }` adjusts.
+
+**stat-hero count-up (automatic):**
+`stat-hero.value` with a leading number ("52%", "126,080$", "5.5") animates as a
+count-up from 0. Keep `value` in visual formatting (digits, not words).
 
 **Visual rules:**
 - For image scenes: `background.src = "$source.image"` (literal — CLI substitutes)

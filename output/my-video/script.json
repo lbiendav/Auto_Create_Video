@@ -14,6 +14,13 @@
     "voiceId": "${VIETNAMESE_VOICEID}",
     "speed": 1.0
   },
+  "ticker": [
+    "TỶ PHÚ GRANTHAM BÁC BỎ BITCOIN",
+    "BTC SỤT 52% TỪ ĐỈNH 126,080$",
+    "VÀNG LẬP ĐỈNH MỚI 5,500$",
+    "MARK CUBAN BÁN BỚT BITCOIN",
+    "THEO DÕI MAI CRYPTO — TIN NÓNG 24/7"
+  ],
   "scenes": [
     {
       "id": "1",
@@ -101,9 +108,12 @@
       "type": "body",
       "voiceText": "Biến động thị trường giai đoạn này rất nhạy cảm, đòi hỏi chúng ta phải theo dõi sát sao.",
       "templateData": {
-        "template": "callout",
-        "tag": "TỔNG KẾT",
-        "statement": "Bức tranh toàn cảnh cho thấy niềm tin của các nhà đầu tư đang sụt giảm."
+        "template": "chart",
+        "title": "BITCOIN RƠI TỪ ĐỈNH",
+        "points": [126080, 118400, 109200, 98700, 91500, 84200, 72800, 66400, 60500],
+        "label": "BTC / USD — TỪ ĐỈNH LỊCH SỬ",
+        "changeText": "-52%",
+        "trend": "down"
       }
     },
     {

@@ -8,16 +8,19 @@ import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ScriptSchema } from "./src/render/script-schema.js";
 import { loadConfig } from "./src/config.js";
-import { getDurationSec, concatWithSilence, mixSfxOntoVoice, type SfxMixSpec } from "./src/assets/audio-tools.js";
+import { getDurationSec, concatWithSilence, mixSfxOntoVoice, mixMusicOntoVoice, type SfxMixSpec } from "./src/assets/audio-tools.js";
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "./src/assets/sfx-selector.js";
-import { existsSync, renameSync } from "node:fs"; // Thêm renameSync an toàn
+import { pickMusic } from "./src/assets/music-selector.js";
+import { existsSync, renameSync, readFileSync } from "node:fs"; // Thêm renameSync an toàn
 import { execSync } from "node:child_process";    // Thêm execSync để gọi lệnh ffmpeg
 import { composeHtml } from "./src/render/html-composer.js";
+import { buildCaptionChunks, type CaptionChunk } from "./src/render/captions.js";
 import { renderWithHyperframes } from "./src/render/hyperframes-runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TPL_DIR = join(__dirname, "src", "render", "templates");
 const SFX_DIR = join(__dirname, "assets", "sfx");
+const MUSIC_DIR = join(__dirname, "assets", "music");
 const SCENE_GAP_SEC = 0.3;
 const OUTRO_HOLD_SEC = 1; // ĐỒNG BỘ: Thiết lập đúng 1 giây chờ sau khi dứt lời thoại thoại giống pipeline
 
@@ -129,13 +132,44 @@ async function main() {
   }
   // ───────────────────────────────────────────────────────────
 
+  // Music bed (same logic as pipeline)
+  if (cfg.music.enabled && script.music?.name !== "none") {
+    const pick = pickMusic({
+      musicDir: MUSIC_DIR,
+      seed: script.metadata.title,
+      explicitName: script.music?.name,
+      explicitFile: cfg.music.file,
+    });
+    if (pick) {
+      const vol = script.music?.volume ?? cfg.music.volume;
+      const withMusic = join(outputDir, "voice-music.mp3");
+      await mixMusicOntoVoice(voiceMp3, { path: pick.path, volume: vol }, withMusic);
+      renameSync(withMusic, voiceMp3);
+      console.log(`music bed: ${pick.fileName} @ volume ${vol}`);
+    } else {
+      console.log("music bed: no tracks in assets/music — skipped");
+    }
+  }
+
   const totalDur = await getDurationSec(voiceMp3);
   console.log(`voice.mp3 total: ${totalDur.toFixed(2)}s`);
 
-  // Determine bg image
+  // Determine bg image + pre-blurred ambient
   const bgImagePath = join(outputDir, "images", "bg.jpg");
-  const fs = await import("node:fs");
-  const bgImageRelPath = fs.existsSync(bgImagePath) ? "images/bg.jpg" : null;
+  const bgImageRelPath = existsSync(bgImagePath) ? "images/bg.jpg" : null;
+  let ambientImageRelPath: string | null = null;
+  if (bgImageRelPath) {
+    try {
+      const blurPath = join(outputDir, "images", "bg-blur.jpg");
+      execSync(
+        `ffmpeg -y -i "${bgImagePath}" -vf "scale=540:-2,gblur=sigma=24,eq=brightness=-0.08:saturation=1.3" -q:v 4 "${blurPath}"`,
+        { stdio: "ignore" },
+      );
+      ambientImageRelPath = "images/bg-blur.jpg";
+    } catch {
+      console.warn("ambient blur failed — continuing without ambient image");
+    }
+  }
   console.log(`bgImage: ${bgImageRelPath ?? "(none — gradient fallback)"}`);
 
   // TikTok avatar — find bundled (jpg/jpeg/png/webp) and copy to output dir
@@ -153,6 +187,20 @@ async function main() {
   // Always re-copy in case bundled was updated
   await copyFile(bundledAvatar, ttAvatarOut);
 
+  // Karaoke captions: per-scene word timelines (SRT from TTS when available)
+  const captionsByScene: Record<string, CaptionChunk[]> = {};
+  for (const scene of script.scenes) {
+    const audio = sceneAudio.find((a) => a.id === scene.id);
+    if (!audio) continue;
+    const srtPath = join(outputDir, "voice", `scene-${scene.id}.srt`);
+    const srtText = existsSync(srtPath) ? readFileSync(srtPath, "utf8") : null;
+    captionsByScene[scene.id] = buildCaptionChunks({
+      voiceText: scene.voiceText,
+      audioDurationSec: audio.durationSec,
+      srtText,
+    });
+  }
+
   // Compose HTML
   const html = composeHtml({
     script,
@@ -163,6 +211,8 @@ async function main() {
     tiktok: cfg.tiktok,
     tiktokAvatarRelPath: ttAvatarFile,
     outroHoldSec: OUTRO_HOLD_SEC, // ĐÃ ĐỒNG BỘ: Sử dụng biến động thay vì số 3 hardcode
+    ambientImageRelPath,
+    captionsByScene,
   });
   await writeFile(join(outputDir, "index.html"), html);
   await writeFile(join(outputDir, "hyperframes.json"), JSON.stringify(HYPERFRAMES_CONFIG, null, 2));

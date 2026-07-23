@@ -30,6 +30,15 @@ export interface Config {
   tiktok: TiktokConfig;
 
   ttsConcurrency: number;
+
+  // Background music bed (assets/music, ducked under voice)
+  music: {
+    enabled: boolean;
+    /** Default bed volume 0–1 when script.json doesn't specify */
+    volume: number;
+    /** Absolute path override — use this exact file for every video */
+    file?: string;
+  };
 }
 
 function intDefault(name: string, def: number): number {
@@ -37,6 +46,14 @@ function intDefault(name: string, def: number): number {
   if (!v) return def;
   const n = parseInt(v, 10);
   if (isNaN(n)) throw new Error(`Env var ${name} must be integer, got "${v}"`);
+  return n;
+}
+
+function floatDefault(name: string, def: number): number {
+  const v = process.env[name];
+  if (!v) return def;
+  const n = parseFloat(v);
+  if (isNaN(n)) throw new Error(`Env var ${name} must be a number, got "${v}"`);
   return n;
 }
 
@@ -93,5 +110,10 @@ export function loadConfig(): Config {
       avatarUrl: process.env.TIKTOK_AVATAR_URL || undefined,
     },
     ttsConcurrency: intDefault("TTS_CONCURRENCY", 1),
+    music: {
+      enabled: !["0", "false", "off"].includes((process.env.MUSIC_ENABLED ?? "1").toLowerCase()),
+      volume: floatDefault("MUSIC_VOLUME", 0.16),
+      file: process.env.MUSIC_FILE || undefined,
+    },
   };
 }

@@ -56,6 +56,19 @@
       }
     },
     {
+      "id": "body-4",
+      "type": "body",
+      "voiceText": "Cổ phiếu Apple tăng vọt ngay sau sự kiện ra mắt sản phẩm.",
+      "templateData": {
+        "template": "chart",
+        "title": "Cổ phiếu Apple",
+        "points": [182, 185, 181, 190, 197, 210],
+        "label": "AAPL — 7 ngày",
+        "changeText": "+15%",
+        "trend": "up"
+      }
+    },
+    {
       "id": "outro",
       "type": "outro",
       "voiceText": "Theo dõi Công nghệ 24h để xem bản tin mới mỗi ngày.",
