@@ -8,13 +8,13 @@ export interface FetchResult {
   reason?: string;
 }
 
-export async function fetchImage(url: string | null, outPath: string): Promise<FetchResult> {
+export async function fetchImage(url: string | null, outPath: string, timeoutMs = 30000): Promise<FetchResult> {
   if (!url) return { success: false, reason: "no url provided (null)" };
 
   try {
     const resp = await axios.get<ArrayBuffer>(url, {
       responseType: "arraybuffer",
-      timeout: 30000,
+      timeout: timeoutMs,
       validateStatus: (s) => s < 400,
     });
 

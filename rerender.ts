@@ -226,7 +226,16 @@ async function main() {
 
   // Render
   const videoPath = join(outputDir, "video.mp4");
-  await renderWithHyperframes({ compositionDir: outputDir, outputPath: videoPath });
+  await renderWithHyperframes({
+    compositionDir: outputDir,
+    outputPath: videoPath,
+    fps: cfg.render.fps,
+    quality: cfg.render.quality,
+    videoBitrate: cfg.render.videoBitrate,
+    crf: cfg.render.crf,
+    gpu: cfg.render.gpu,
+    minMbps: cfg.render.minMbps,
+  });
   console.log(`\nDone: ${videoPath}`);
 }
 

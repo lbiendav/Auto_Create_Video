@@ -36,3 +36,7 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+# MAI Crypto preview build artifacts
+dist-preview/
+tsconfig.preview.json
+output/preview/

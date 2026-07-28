@@ -199,6 +199,14 @@ function renderScene(
       inner = renderOutroInner(td, tiktok, tiktokAvatarRelPath);
       layoutName = "outro";
       break;
+    case "finance-hook":
+    case "image":
+    case "document":
+    case "brand-outro":
+      throw new Error(
+        `Template "${td.template}" is image-driven — render it with VIDEO_THEME=maicrypto ` +
+        `(the broadcast composer does not support it).`
+      );
     default: {
       const _never: never = td;
       throw new Error(`Unknown template: ${(_never as any).template}`);

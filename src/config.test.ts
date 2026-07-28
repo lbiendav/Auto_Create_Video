@@ -13,6 +13,12 @@ const ENV_KEYS = [
   "ELEVENLABS_MODEL_ID",
   "ELEVENLABS_ENDPOINT",
   "TTS_CONCURRENCY",
+  "VIDEO_FPS",
+  "VIDEO_QUALITY",
+  "VIDEO_BITRATE",
+  "VIDEO_CRF",
+  "VIDEO_GPU",
+  "VIDEO_MIN_MBPS",
 ];
 
 describe("loadConfig", () => {
@@ -90,5 +96,71 @@ describe("loadConfig", () => {
     process.env.VIETNAMESE_API_KEY = "k";
     process.env.VIETNAMESE_VOICEID = "v";
     expect(() => loadConfig()).toThrow(/TTS_PROVIDER/);
+  });
+
+  describe("render config (TikTok 1080x1920 H.264)", () => {
+    const withKeys = () => {
+      process.env.VIETNAMESE_API_KEY = "sk_test_abc";
+      process.env.VIETNAMESE_VOICEID = "voice123";
+    };
+
+    it("defaults to 60fps / high / 20M ABR", () => {
+      withKeys();
+      const { render } = loadConfig();
+      expect(render.fps).toBe(60);
+      expect(render.quality).toBe("high");
+      expect(render.videoBitrate).toBe("20M");
+      expect(render.crf).toBeUndefined();
+      expect(render.gpu).toBe(false);
+      expect(render.minMbps).toBe(10);
+    });
+
+    it("reads overrides from env", () => {
+      withKeys();
+      process.env.VIDEO_FPS = "30";
+      process.env.VIDEO_QUALITY = "standard";
+      process.env.VIDEO_BITRATE = "12m";
+      process.env.VIDEO_GPU = "1";
+      process.env.VIDEO_MIN_MBPS = "8";
+      const { render } = loadConfig();
+      expect(render.fps).toBe(30);
+      expect(render.quality).toBe("standard");
+      expect(render.videoBitrate).toBe("12M");
+      expect(render.gpu).toBe(true);
+      expect(render.minMbps).toBe(8);
+    });
+
+    it("VIDEO_BITRATE=off falls back to CRF mode", () => {
+      withKeys();
+      process.env.VIDEO_BITRATE = "off";
+      process.env.VIDEO_CRF = "15";
+      const { render } = loadConfig();
+      expect(render.videoBitrate).toBeUndefined();
+      expect(render.crf).toBe(15);
+    });
+
+    it("rejects invalid fps", () => {
+      withKeys();
+      process.env.VIDEO_FPS = "45";
+      expect(() => loadConfig()).toThrow(/VIDEO_FPS must be 24, 30 or 60/);
+    });
+
+    it("rejects invalid quality", () => {
+      withKeys();
+      process.env.VIDEO_QUALITY = "ultra";
+      expect(() => loadConfig()).toThrow(/VIDEO_QUALITY/);
+    });
+
+    it("rejects malformed bitrate", () => {
+      withKeys();
+      process.env.VIDEO_BITRATE = "20mbps";
+      expect(() => loadConfig()).toThrow(/VIDEO_BITRATE must look like/);
+    });
+
+    it("rejects out-of-range CRF", () => {
+      withKeys();
+      process.env.VIDEO_CRF = "99";
+      expect(() => loadConfig()).toThrow(/VIDEO_CRF must be an integer 0-51/);
+    });
   });
 });

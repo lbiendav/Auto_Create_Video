@@ -1,11 +1,56 @@
 ---
 name: create-news-video
-description: Tạo video tin tức ngắn 9:16 (~60s) từ URL bài báo hoặc file .txt tiếng Việt. Trigger khi user yêu cầu tạo video tin tức, làm short news, làm bản tin video, render tin thành video, làm TikTok tin tức. Output: video.mp4 + voice.mp3 + script.txt cho CapCut.
+description: Tạo video tin tức ngắn 9:16 (~60s) từ URL bài báo hoặc file .txt tiếng Việt. Mặc định theme "maicrypto" — phong cách ảnh (@oncoinx2 / MAI Crypto): mỗi cảnh là 1 ảnh minh hoạ (hoặc AI-gen), nền chart nến ở hook, credit nguồn động, không phụ đề. Trigger khi user yêu cầu tạo video tin tức, short news, bản tin video, TikTok tin tức, video kiểu oncoinx / MAI Crypto. Output: video.mp4 + voice.mp3 + script.txt cho CapCut.
 ---
 
 # Create News Video Skill
 
 Generate a Vietnamese 9:16 motion-graphic news video from a URL or .txt file.
+
+---
+
+## ⭐ DEFAULT MODE: image-driven (MAI Crypto / @oncoinx2 style)
+
+The pipeline defaults to `VIDEO_THEME=maicrypto`. In this mode the video is
+**image-driven and minimal** — matching the `@oncoinx2` channel:
+
+- Every beat shows a **relevant image** (blurred fill + Ken Burns) — NOT text cards.
+- The opening is a **finance-hook**: candlestick backdrop + drifting coins + a big
+  burned-in headline + price tags + a red badge.
+- Only chrome: top-center **dynamic source credit** (`Tổng hợp bởi <source>`) and the
+  sun logo + `MAI Crypto` wordmark. **No karaoke captions, no ticker.**
+- Closes on a sun-branded **outro** card.
+
+**So when authoring `script.json` for this mode, use these templates and give each
+scene an `image` (a `prompt` to AI-generate, or a `src` URL/path):**
+
+| Scene | `type` | `templateData.template` | image? |
+|---|---|---|---|
+| 1 (opening) | `hook` | `finance-hook` | optional subject |
+| 2…N (body) | `body` | `image` (default) or `document` | **yes** (prompt/URL) |
+| last | `outro` | `brand-outro` | no |
+
+Minimal per-scene shape:
+```json
+{ "id": "2", "type": "body",
+  "voiceText": "…câu văn nói tiếng Việt (số viết chữ)…",
+  "templateData": { "template": "image", "label": "(tuỳ chọn) chú thích ngắn" },
+  "image": { "prompt": "english scene description for the illustration", "kenBurns": "pan-right" } }
+```
+
+Set `metadata.source.name` (e.g. `"VnExpress"`) so the credit reads
+*Tổng hợp bởi VnExpress*. Write good `image.prompt`s in English describing a
+photo/illustration for that beat (people, gold bars, charts, screenshots…).
+
+**Full spec + a complete example:** see `docs/MAI-CRYPTO-THEME.md` and the ready
+sample `output/sample-maicrypto/script.json`. The Vietnamese TTS number/phonetic
+rules below STILL APPLY to every `voiceText`.
+
+> The older text-card look (comparison / stat-hero / feature-list / callout / chart +
+> karaoke captions + ticker) is still available via `VIDEO_THEME=broadcast` and is
+> what the rest of this document describes.
+
+---
 
 ## Input
 

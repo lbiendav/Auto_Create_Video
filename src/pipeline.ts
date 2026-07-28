@@ -11,6 +11,8 @@ import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "./assets/sfx-
 import { pickMusic } from "./assets/music-selector.js";
 import { existsSync, readFileSync } from "node:fs";
 import { composeHtml } from "./render/html-composer.js";
+import { composeHtmlMaiCrypto } from "./render/maicrypto-composer.js";
+import { resolveSceneImages } from "./assets/scene-images.js";
 import { buildCaptionChunks, type CaptionChunk } from "./render/captions.js";
 import { renderWithHyperframes } from "./render/hyperframes-runner.js";
 import { log } from "./utils/logger.js";
@@ -31,6 +33,7 @@ const OUTRO_HOLD_SEC = 1; // ĐÃ CHỈNH: Đặt đúng 1 giây chờ sau khi d
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TPL_DIR = join(__dirname, "render", "templates");
+const TPL_DIR_MAI = join(__dirname, "render", "templates", "maicrypto");
 /** Path to the SFX library (relative to project root) */
 const SFX_DIR = join(__dirname, "..", "assets", "sfx");
 /** Path to the music-bed library (relative to project root) */
@@ -265,7 +268,7 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   const ttAvatarExt = bundledAvatar.split(".").pop()!.toLowerCase();
   const ttAvatarFile = `tiktok-avatar.${ttAvatarExt}`;
   const ttAvatarOut = join(outputDir, ttAvatarFile);
-  if (cfg.tiktok.avatarUrl) {
+  if (cfg.theme === "broadcast" && cfg.tiktok.avatarUrl) {
     const r = await fetchImage(cfg.tiktok.avatarUrl, ttAvatarOut);
     if (!r.success) {
       log.warn(`TikTok avatar download failed: ${r.reason} → falling back to bundled default`);
@@ -291,39 +294,86 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   const srtCount = script.scenes.filter((s) => existsSync(join(voiceDir, `scene-${s.id}.srt`))).length;
   log.info(`  captions: ${srtCount}/${script.scenes.length} scenes with SRT timing (rest estimated)`);
 
-  const html = composeHtml({
-    script,
-    sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
-    gapSec: SCENE_GAP_SEC,
-    bgImageRelPath,
-    audioRelPath: "voice.mp3",
-    tiktok: cfg.tiktok,
-    tiktokAvatarRelPath: ttAvatarFile,
-    outroHoldSec: OUTRO_HOLD_SEC,
-    ambientImageRelPath,
-    captionsByScene,
-  });
-
-  // hyperframes expects: index.html (NOT composition.html), hyperframes.json, meta.json in DIR
-  await writeFile(join(outputDir, "index.html"), html);
-
-  await writeFile(join(outputDir, "hyperframes.json"), JSON.stringify(HYPERFRAMES_CONFIG, null, 2));
-
+  // ── STEP 6b: theme-aware compose ──────────────────────────────────────────
   const slug = basename(outputDir);
+  let html: string;
+  let themeTplDir = TPL_DIR;
+
+  if (cfg.theme === "maicrypto") {
+    themeTplDir = TPL_DIR_MAI;
+
+    // Copy the brand (sun) logo next to index.html
+    const findBrandLogo = (file: string): string => {
+      const baseDir = join(__dirname, "..", "assets");
+      if (existsSync(join(baseDir, file))) return join(baseDir, file);
+      const stem = file.replace(/\.[^.]+$/, "");
+      for (const ext of ["png", "jpg", "jpeg", "webp", "svg"]) {
+        const p = join(baseDir, `${stem}.${ext}`);
+        if (existsSync(p)) return p;
+      }
+      throw new Error(`Brand logo not found: assets/${file}`);
+    };
+    const logoSrc = findBrandLogo(cfg.brand.logoFile);
+    const logoExt = logoSrc.split(".").pop()!.toLowerCase();
+    const logoRelPath = `logo.${logoExt}`;
+    await copyFile(logoSrc, join(outputDir, logoRelPath));
+
+    // Resolve per-scene images (URL / local path / AI-generated) + pre-blur fills
+    const sceneImages = await resolveSceneImages(script, outputDir, cfg.imageGen, cfg.imageSearch);
+    const sourceName = script.metadata.source.name ?? script.metadata.source.domain;
+
+    html = composeHtmlMaiCrypto({
+      script,
+      sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
+      gapSec: SCENE_GAP_SEC,
+      audioRelPath: "voice.mp3",
+      brand: cfg.brand,
+      sourceName,
+      logoRelPath,
+      outroHoldSec: OUTRO_HOLD_SEC,
+      sceneImages,
+    });
+  } else {
+    html = composeHtml({
+      script,
+      sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
+      gapSec: SCENE_GAP_SEC,
+      bgImageRelPath,
+      audioRelPath: "voice.mp3",
+      tiktok: cfg.tiktok,
+      tiktokAvatarRelPath: ttAvatarFile,
+      outroHoldSec: OUTRO_HOLD_SEC,
+      ambientImageRelPath,
+      captionsByScene,
+    });
+  }
+
+  // hyperframes expects: index.html, hyperframes.json, meta.json in DIR
+  await writeFile(join(outputDir, "index.html"), html);
+  await writeFile(join(outputDir, "hyperframes.json"), JSON.stringify(HYPERFRAMES_CONFIG, null, 2));
   await writeFile(join(outputDir, "meta.json"), JSON.stringify({
     id: slug,
     name: script.metadata.title,
     createdAt: new Date().toISOString(),
   }, null, 2));
 
-  // Copy templates next to the index.html so relative paths resolve
-  await copyFile(join(TPL_DIR, "styles.css"),    join(outputDir, "styles.css"));
-  await copyFile(join(TPL_DIR, "animations.js"), join(outputDir, "animations.js"));
+  // Copy the ACTIVE theme's templates next to index.html so relative paths resolve
+  await copyFile(join(themeTplDir, "styles.css"),    join(outputDir, "styles.css"));
+  await copyFile(join(themeTplDir, "animations.js"), join(outputDir, "animations.js"));
 
   // STEP 7
   log.step(7, TOTAL_STEPS, "Render with hyperframes");
   const videoPath = join(outputDir, "video.mp4");
-  await renderWithHyperframes({ compositionDir: outputDir, outputPath: videoPath });
+  await renderWithHyperframes({
+    compositionDir: outputDir,
+    outputPath: videoPath,
+    fps: cfg.render.fps,
+    quality: cfg.render.quality,
+    videoBitrate: cfg.render.videoBitrate,
+    crf: cfg.render.crf,
+    gpu: cfg.render.gpu,
+    minMbps: cfg.render.minMbps,
+  });
 
   // STEP 8
   log.step(8, TOTAL_STEPS, "Done");
