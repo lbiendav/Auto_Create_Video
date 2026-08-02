@@ -200,6 +200,8 @@ function renderScene(
       layoutName = "outro";
       break;
     case "finance-hook":
+    case "hook-split":
+    case "hook-collage":
     case "image":
     case "document":
     case "brand-outro":

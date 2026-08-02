@@ -35,8 +35,41 @@ export interface ImageHit {
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
+/**
+ * Kho ảnh bán bản quyền: ảnh preview của họ LUÔN có watermark đè lên, dùng vào
+ * video là hỏng khung hình. Chặn thẳng ở mọi nguồn.
+ */
+const WATERMARK_HOSTS =
+  /(alamy|shutterstock|dreamstime|istockphoto|gettyimages|123rf|depositphotos|agefotostock|stockphoto|adobestock|stock\.adobe|canstockphoto|vectorstock|bigstockphoto|zumapress|imago-images)/i;
+
+/** Đường dẫn ảnh có dấu hiệu watermark/preview. */
+const WATERMARK_PATH = /(watermark|preview|comp\/|_comp_|-comp-)/i;
+
+/**
+ * Không phải ảnh báo chí: template tài liệu, clipart, icon, logo, vector, ảnh
+ * mockup... Những thứ này lên khung hình là hỏng ngay (chữ Anh, nền trắng).
+ */
+const JUNK_PATH =
+  /(template|clip-?art|\bicon\b|\blogo\b|vector|mockup|placeholder|illustration|cartoon|drawing|sample|diagram|infographic|thumb(nail)?_|\bsprite\b|favicon)/i;
+
+/** Ảnh quá nhỏ / không phải ảnh chụp thì bỏ. */
+const NON_PHOTO_EXT = /\.(svg|gif|ico|bmp)(\?|$)/i;
+
+export function isJunkImage(url: string, sourcePage?: string): boolean {
+  return JUNK_PATH.test(url) || NON_PHOTO_EXT.test(url) || (sourcePage ? JUNK_PATH.test(sourcePage) : false);
+}
+
+export function isWatermarked(url: string, sourcePage?: string): boolean {
+  return (
+    WATERMARK_HOSTS.test(url) ||
+    WATERMARK_PATH.test(url) ||
+    (sourcePage ? WATERMARK_HOSTS.test(sourcePage) : false)
+  );
+}
+
 /** Domains that rarely yield a usable article lead image — skip them. */
-const SKIP_HOSTS = /(youtube\.com|youtu\.be|facebook\.com|twitter\.com|x\.com|instagram\.com|tiktok\.com|pinterest\.|reddit\.com)/i;
+const SKIP_HOSTS =
+  /(youtube\.com|youtu\.be|facebook\.com|twitter\.com|x\.com|instagram\.com|tiktok\.com|pinterest\.|reddit\.com|alamy|shutterstock|dreamstime|istockphoto|gettyimages|123rf|depositphotos)/i;
 
 /**
  * Gather ordered image candidates for a query. The caller downloads them in
@@ -56,6 +89,9 @@ export async function searchImageCandidates(query: string, cfg: ImageSearchConfi
       else if (src === "duckduckgo") hits = await fromDuckDuckGo(q);
       else if (src === "openverse") hits = await fromOpenverse(q);
       else if (src === "wikimedia") hits = await fromWikimedia(q);
+      const before = hits.length;
+      hits = hits.filter((h) => !isWatermarked(h.url, h.sourcePage) && !isJunkImage(h.url, h.sourcePage));
+      if (before > hits.length) log.info(`    [${src}] bỏ ${before - hits.length} ảnh watermark/template/clipart`);
       if (hits.length) {
         log.info(`    [${src}] ${hits.length} candidate(s)`);
         out.push(...hits);
@@ -173,7 +209,12 @@ async function fromDuckDuckGo(q: string): Promise<ImageHit[]> {
   });
   const results: any[] = r.data?.results ?? [];
   return results
-    .filter((x) => x.image && x.width >= 600)
+    .filter((x) => x.image && x.width >= 900 && x.height >= 600)
+    // ảnh chụp (jpg) đứng trước đồ hoạ (png), ảnh to đứng trước
+    .sort((a, b) => {
+      const photo = (u: string) => (/\.jpe?g(\?|$)/i.test(u) ? 0 : 1);
+      return photo(a.image) - photo(b.image) || (b.width ?? 0) - (a.width ?? 0);
+    })
     .slice(0, 5)
     .map((x) => {
       let credit = "";

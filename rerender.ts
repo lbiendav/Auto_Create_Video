@@ -14,11 +14,15 @@ import { pickMusic } from "./src/assets/music-selector.js";
 import { existsSync, renameSync, readFileSync } from "node:fs"; // Thêm renameSync an toàn
 import { execSync } from "node:child_process";    // Thêm execSync để gọi lệnh ffmpeg
 import { composeHtml } from "./src/render/html-composer.js";
+import { composeHtmlMaiCrypto } from "./src/render/maicrypto-composer.js";
+import { resolveSceneImages, resolveSceneCellImages } from "./src/assets/scene-images.js";
+import { resolveSceneVideos } from "./src/assets/scene-videos.js";
 import { buildCaptionChunks, type CaptionChunk } from "./src/render/captions.js";
 import { renderWithHyperframes } from "./src/render/hyperframes-runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TPL_DIR = join(__dirname, "src", "render", "templates");
+const TPL_DIR_MAI = join(__dirname, "src", "render", "templates", "maicrypto");
 const SFX_DIR = join(__dirname, "assets", "sfx");
 const MUSIC_DIR = join(__dirname, "assets", "music");
 const SCENE_GAP_SEC = 0.3;
@@ -201,19 +205,74 @@ async function main() {
     });
   }
 
-  // Compose HTML
-  const html = composeHtml({
-    script,
-    sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
-    gapSec: SCENE_GAP_SEC,
-    bgImageRelPath,
-    audioRelPath: "voice.mp3",
-    tiktok: cfg.tiktok,
-    tiktokAvatarRelPath: ttAvatarFile,
-    outroHoldSec: OUTRO_HOLD_SEC, // ĐÃ ĐỒNG BỘ: Sử dụng biến động thay vì số 3 hardcode
-    ambientImageRelPath,
-    captionsByScene,
-  });
+  // ── Compose HTML (theme-aware, giống pipeline) ───────────────────────────
+  let html: string;
+  let themeTplDir = TPL_DIR;
+
+  if (cfg.theme === "maicrypto") {
+    themeTplDir = TPL_DIR_MAI;
+
+    // logo thương hiệu
+    const findBrandLogo = (file: string): string => {
+      const baseDir = join(__dirname, "assets");
+      if (existsSync(join(baseDir, file))) return join(baseDir, file);
+      const stem = file.replace(/\.[^.]+$/, "");
+      for (const ext of ["png", "jpg", "jpeg", "webp", "svg"]) {
+        const p2 = join(baseDir, `${stem}.${ext}`);
+        if (existsSync(p2)) return p2;
+      }
+      throw new Error(`Brand logo not found: assets/${file}`);
+    };
+    const logoSrc = findBrandLogo(cfg.brand.logoFile);
+    const logoRelPath = `logo.${logoSrc.split(".").pop()!.toLowerCase()}`;
+    await copyFile(logoSrc, join(outputDir, logoRelPath));
+
+    // scene video nhưng thiếu ảnh -> ảnh dự phòng (không bao giờ để cảnh trống)
+    for (const scene of script.scenes) {
+      if (scene.video && !scene.image) {
+        scene.image = { query: scene.video.query ?? scene.templateData.template, fit: "cover", kenBurns: "zoom-in" };
+      }
+    }
+
+    // ảnh/clip đã cache thì dùng lại, thiếu mới tải
+    const sceneImages = await resolveSceneImages(script, outputDir, cfg.imageGen, cfg.imageSearch);
+    const sceneCollageImages = await resolveSceneCellImages(script, outputDir, cfg.imageGen, cfg.imageSearch);
+
+    const sceneDurations: Record<string, number> = {};
+    for (const scene of script.scenes) {
+      const a = sceneAudio.find((x) => x.id === scene.id);
+      if (!a) continue;
+      sceneDurations[scene.id] = a.durationSec + SCENE_GAP_SEC + (scene.type === "outro" ? OUTRO_HOLD_SEC : 0);
+    }
+    const sceneVideos = await resolveSceneVideos(script, outputDir, sceneDurations, cfg.videoSearch, cfg.render.fps);
+
+    html = composeHtmlMaiCrypto({
+      script,
+      sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
+      gapSec: SCENE_GAP_SEC,
+      audioRelPath: "voice.mp3",
+      brand: cfg.brand,
+      sourceName: script.metadata.source.name ?? script.metadata.source.domain,
+      logoRelPath,
+      outroHoldSec: OUTRO_HOLD_SEC,
+      sceneImages,
+      sceneCollageImages,
+      sceneVideos,
+    });
+  } else {
+    html = composeHtml({
+      script,
+      sceneAudio: sceneAudio.map((a) => ({ id: a.id, durationSec: a.durationSec })),
+      gapSec: SCENE_GAP_SEC,
+      bgImageRelPath,
+      audioRelPath: "voice.mp3",
+      tiktok: cfg.tiktok,
+      tiktokAvatarRelPath: ttAvatarFile,
+      outroHoldSec: OUTRO_HOLD_SEC,
+      ambientImageRelPath,
+      captionsByScene,
+    });
+  }
   await writeFile(join(outputDir, "index.html"), html);
   await writeFile(join(outputDir, "hyperframes.json"), JSON.stringify(HYPERFRAMES_CONFIG, null, 2));
   await writeFile(join(outputDir, "meta.json"), JSON.stringify({
@@ -221,8 +280,8 @@ async function main() {
     name: script.metadata.title,
     createdAt: new Date().toISOString(),
   }, null, 2));
-  await copyFile(join(TPL_DIR, "styles.css"),    join(outputDir, "styles.css"));
-  await copyFile(join(TPL_DIR, "animations.js"), join(outputDir, "animations.js"));
+  await copyFile(join(themeTplDir, "styles.css"),    join(outputDir, "styles.css"));
+  await copyFile(join(themeTplDir, "animations.js"), join(outputDir, "animations.js"));
 
   // Render
   const videoPath = join(outputDir, "video.mp4");

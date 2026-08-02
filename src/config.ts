@@ -46,6 +46,32 @@ export interface ImageSearchConfig {
   unsplashKey?: string;
 }
 
+/**
+ * Per-scene VIDEO CLIP sourcing. Scenes with `video: { query }` search these
+ * sources in order and keep the first playable clip; `video: { src }` skips
+ * the search entirely.
+ */
+export interface VideoSearchConfig {
+  /** enable the whole feature (SCENE_VIDEO=0 turns every scene back into stills) */
+  enabled: boolean;
+  /** thứ tự nguồn, vd ["youtube","pexels","pixabay","wikimedia","articles"] */
+  order: string[];
+  pexelsKey?: string;
+  pixabayKey?: string;
+  /**
+   * YouTube Data API v3 key. Chỉ tìm video có licence Creative Commons
+   * (`videoLicense=creativeCommon`) — tức tác giả đã cho phép tái sử dụng kể cả
+   * mục đích thương mại, miễn ghi nguồn. Không có key = bỏ qua nguồn youtube.
+   */
+  youtubeKey?: string;
+  /** đường dẫn yt-dlp (mặc định "yt-dlp" trong PATH) — cần để tải file từ YouTube */
+  ytdlpPath: string;
+  /** chỉ nhận clip YouTube ngắn hơn ngần này (giây); dài hơn thì bỏ qua */
+  youtubeMaxSec: number;
+  /** hard cap on a single clip's on-screen length (seconds); longer scenes loop it */
+  maxClipSec: number;
+}
+
 /** Cau hinh xuat video cuoi cung (hyperframes -> ffmpeg/libx264). */
 export interface RenderConfig {
   /** 24 | 30 | 60. TikTok chap nhan ca ba; 60 muot hon cho animation. */
@@ -87,6 +113,7 @@ export interface Config {
   brand: BrandConfig;
   imageGen: ImageGenConfig;
   imageSearch: ImageSearchConfig;
+  videoSearch: VideoSearchConfig;
 
   // TikTok follow card (outro) — broadcast theme only
   tiktok: TiktokConfig;
@@ -176,6 +203,35 @@ export function loadConfig(): Config {
     return { order, pexelsKey, unsplashKey };
   })();
 
+  const pixabayKey = process.env.PIXABAY_API_KEY || undefined;
+  const youtubeKey = process.env.YOUTUBE_API_KEY || undefined;
+  const videoSearch: VideoSearchConfig = (() => {
+    let order: string[];
+    if (process.env.SCENE_VIDEO_SOURCE) {
+      order = process.env.SCENE_VIDEO_SOURCE.split(",").map((x) => x.trim()).filter(Boolean);
+    } else {
+      // youtube đứng đầu khi có key: bám sát chủ đề script nhất, và bộ lọc
+      // creativeCommon đảm bảo clip được phép tái sử dụng. pexels/pixabay là
+      // stock chất lượng cao; wikimedia không cần key; articles đứng cuối vì
+      // báo hiếm khi lộ file mp4.
+      order = [];
+      if (youtubeKey) order.push("youtube");
+      if (pexelsKey) order.push("pexels");
+      if (pixabayKey) order.push("pixabay");
+      order.push("wikimedia", "articles");
+    }
+    return {
+      enabled: !["0", "false", "off"].includes((process.env.SCENE_VIDEO_ENABLED ?? "1").toLowerCase()),
+      order,
+      pexelsKey,
+      pixabayKey,
+      youtubeKey,
+      ytdlpPath: process.env.YTDLP_PATH || "yt-dlp",
+      youtubeMaxSec: floatDefault("YOUTUBE_MAX_SEC", 1200),
+      maxClipSec: floatDefault("SCENE_VIDEO_MAX_SEC", 12),
+    };
+  })();
+
   const fps = intDefault("VIDEO_FPS", 60);
   if (![24, 30, 60].includes(fps)) {
     throw new Error(`VIDEO_FPS must be 24, 30 or 60, got "${fps}"`);
@@ -230,6 +286,7 @@ export function loadConfig(): Config {
         "cinematic editorial news illustration, dramatic lighting, high detail, 9:16 vertical, realistic",
     },
     imageSearch,
+    videoSearch,
 
     tiktok: {
       displayName: process.env.TIKTOK_DISPLAY_NAME ?? "Công nghệ 24h",

@@ -12,7 +12,8 @@ import { pickMusic } from "./assets/music-selector.js";
 import { existsSync, readFileSync } from "node:fs";
 import { composeHtml } from "./render/html-composer.js";
 import { composeHtmlMaiCrypto } from "./render/maicrypto-composer.js";
-import { resolveSceneImages } from "./assets/scene-images.js";
+import { resolveSceneImages, resolveSceneCellImages } from "./assets/scene-images.js";
+import { resolveSceneVideos } from "./assets/scene-videos.js";
 import { buildCaptionChunks, type CaptionChunk } from "./render/captions.js";
 import { renderWithHyperframes } from "./render/hyperframes-runner.js";
 import { log } from "./utils/logger.js";
@@ -29,6 +30,11 @@ const SCENE_GAP_SEC = 0.3;
  * video ends a few hundred ms after the card slides up + click animation).
  * Audio stays silent during this hold; visual stays on screen.
  */
+/**
+ * Giọng đọc của scene outro dài quá ngần này (giây) thì cảnh báo: thẻ outro là
+ * hình tĩnh, nói càng lâu thì khán giả càng phải nhìn logo đứng yên.
+ */
+const OUTRO_MAX_VOICE_SEC = 6;
 const OUTRO_HOLD_SEC = 1; // ĐÃ CHỈNH: Đặt đúng 1 giây chờ sau khi dứt lời thoại thoại theo yêu cầu
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -245,6 +251,21 @@ export async function runPipeline(scriptPath: string): Promise<void> {
     }
   }
 
+  // Thẻ outro là hình TĨNH. Thời lượng scene = đúng độ dài giọng đọc của nó,
+  // nên nếu nhét nội dung tin vào voiceText của outro thì khán giả phải nhìn
+  // logo đứng yên suốt lúc lời thoại còn đang chạy — cảm giác như video đã kết
+  // thúc mà vẫn còn người nói. Outro chỉ nên chứa câu CTA.
+  const outroAudio = sceneAudio.find((a) => script.scenes.find((s) => s.id === a.id)?.type === "outro");
+  if (outroAudio && outroAudio.durationSec > OUTRO_MAX_VOICE_SEC) {
+    const outroScene = script.scenes.find((s) => s.type === "outro")!;
+    log.warn(
+      `Outro nói ${outroAudio.durationSec.toFixed(1)}s (ngưỡng ${OUTRO_MAX_VOICE_SEC}s) — ` +
+        `thẻ thương hiệu sẽ đứng yên ngần ấy giây trong khi giọng vẫn đọc.\n` +
+        `      Chuyển phần nội dung tin sang một scene body có ảnh/clip, để outro chỉ còn câu kêu gọi theo dõi.\n` +
+        `      voiceText hiện tại: "${outroScene.voiceText.slice(0, 70)}${outroScene.voiceText.length > 70 ? "…" : ""}"`,
+    );
+  }
+
   const totalAudioSec = await getDurationSec(voiceMp3);
   log.info(`  voice.mp3 total: ${totalAudioSec.toFixed(2)}s`);
   if (totalAudioSec < DURATION_MIN_SEC || totalAudioSec > DURATION_MAX_SEC) {
@@ -318,8 +339,39 @@ export async function runPipeline(scriptPath: string): Promise<void> {
     const logoRelPath = `logo.${logoExt}`;
     await copyFile(logoSrc, join(outputDir, logoRelPath));
 
+    // AN TOÀN: scene khai báo `video` nhưng không có `image` sẽ rơi vào nền nến
+    // trống trơn nếu tải clip thất bại. Tự sinh ảnh dự phòng từ chính từ khoá clip.
+    for (const scene of script.scenes) {
+      if (scene.video && !scene.image) {
+        const q = scene.video.query ?? scene.templateData.template;
+        scene.image = { query: q, fit: "cover", kenBurns: "zoom-in" };
+        log.info(`  scene ${scene.id}: thêm ảnh dự phòng cho beat video ("${q}")`);
+      }
+    }
+
     // Resolve per-scene images (URL / local path / AI-generated) + pre-blur fills
     const sceneImages = await resolveSceneImages(script, outputDir, cfg.imageGen, cfg.imageSearch);
+    // Extra cells for multi-image templates (hook-collage)
+    const sceneCollageImages = await resolveSceneCellImages(script, outputDir, cfg.imageGen, cfg.imageSearch);
+
+    // On-screen length of every scene — must match the composer's own timing so
+    // each normalised clip is exactly as long as the beat that shows it.
+    const sceneDurations: Record<string, number> = {};
+    for (const scene of script.scenes) {
+      const a = sceneAudio.find((x) => x.id === scene.id);
+      if (!a) continue;
+      sceneDurations[scene.id] = a.durationSec + SCENE_GAP_SEC + (scene.type === "outro" ? OUTRO_HOLD_SEC : 0);
+    }
+
+    // Per-scene video clips: direct src, or searched from related platforms
+    const sceneVideos = await resolveSceneVideos(
+      script,
+      outputDir,
+      sceneDurations,
+      cfg.videoSearch,
+      cfg.render.fps,
+    );
+
     const sourceName = script.metadata.source.name ?? script.metadata.source.domain;
 
     html = composeHtmlMaiCrypto({
@@ -332,6 +384,8 @@ export async function runPipeline(scriptPath: string): Promise<void> {
       logoRelPath,
       outroHoldSec: OUTRO_HOLD_SEC,
       sceneImages,
+      sceneCollageImages,
+      sceneVideos,
     });
   } else {
     html = composeHtml({

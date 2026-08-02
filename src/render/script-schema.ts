@@ -15,12 +15,40 @@ const SceneImage = z.object({
   /** keyword(s) → search the web for a REAL photo (preferred over AI). e.g. "cambodia scam compound" */
   query: z.string().max(120).optional(),
   prompt: z.string().max(400).optional(),
-  /** contain = letterbox the whole image (default, @oncoinx2 style); cover = fill+crop */
+  /** contain = ảnh nằm trọn trên nền mờ của chính nó (mặc định, kiểu @oncoinx2); cover = lấp đầy + cắt */
   fit: z.enum(["contain", "cover"]).default("contain"),
   /** Ken Burns move applied to the foreground image */
   kenBurns: z.enum(["zoom-in", "zoom-out", "pan-left", "pan-right"]).default("zoom-in"),
 });
 export type SceneImageType = z.infer<typeof SceneImage>;
+
+// ── Per-scene VIDEO source ─────────────────────────────────────────────────
+/**
+ * Short video clip shown in a scene (instead of, or on top of, the still).
+ * Three ways to supply it:
+ *  - `src`   : a direct mp4/webm URL, or a file already inside the output dir.
+ *  - `query` : keyword(s) → the pipeline searches related platforms/pages
+ *              (news articles, stock libraries) and pulls the first playable
+ *              clip it finds. This is the "video from related content" mode.
+ *  - nothing : the scene falls back to its image.
+ * Every resolved clip is normalised by ffmpeg to 1080×1920 (blurred fill +
+ * centred subject), trimmed/looped to the scene length, and muted — so the
+ * HyperFrames frame-by-frame renderer stays deterministic.
+ */
+const SceneVideo = z.object({
+  src: z.string().optional(),
+  /** keyword(s) → search related pages/platforms for a clip. e.g. "bitcoin trading floor" */
+  query: z.string().max(120).optional(),
+  /** trim in-point inside the source clip (seconds) */
+  startSec: z.number().min(0).max(600).default(0),
+  /** cover = fill the 9:16 frame; contain = letterbox over a blurred fill (default) */
+  fit: z.enum(["cover", "contain"]).default("contain"),
+  /** playback speed applied at normalisation time (0.5 = slow-mo, 1 = normal) */
+  speed: z.number().min(0.25).max(2).default(1),
+  /** show the small red "CLIP" marker over the beat */
+  chip: z.string().max(20).optional(),
+});
+export type SceneVideoType = z.infer<typeof SceneVideo>;
 
 // ── Template data shapes (discriminated by template field) ─────────────────
 
@@ -122,6 +150,58 @@ const FinanceHookData = z.object({
 });
 
 /**
+ * HOOK SPLIT — the opening card: khung chia đôi.
+ *   nửa trên  = ảnh chủ đề (blurred fill + Ken Burns), hoà mềm xuống dưới
+ *   nửa dưới  = khối màu thương hiệu: logo/wordmark kênh + CÂU TÓM TẮT in hoa
+ * Đây là kiểu mở đầu mặc định.
+ */
+const HookSplitData = z.object({
+  template: z.literal("hook-split"),
+  /** Câu tóm tắt in hoa ở nửa dưới (có thể dài, tự co cỡ chữ theo độ dài) */
+  summary: z.string().min(1).max(220),
+  /** Vị trí đường chia (tỉ lệ chiều cao khung). 0.42–0.62, mặc định 0.51 */
+  splitAt: z.number().min(0.42).max(0.62).default(0.51),
+  /** Màu khối dưới: brand = vàng đậm (mặc định) | dark = đen ánh vàng | emerald | crimson */
+  panelTone: z.enum(["brand", "dark", "emerald", "crimson"]).default("brand"),
+  /** Hiện logo + tên kênh lớn ở đầu khối dưới (như bản gốc) */
+  showWordmark: z.boolean().default(true),
+  /** Nhãn nhỏ phía trên câu tóm tắt, vd "TIN NÓNG" (bỏ trống thì không hiện) */
+  badge: z.string().max(16).optional(),
+  /** Dòng nhỏ in hoa cạnh badge, vd "CHỨNG KHOÁN · 28/07" */
+  kicker: z.string().max(48).optional(),
+  /** Các từ được tô màu nhấn trong câu tóm tắt */
+  highlight: z.array(z.string().max(30)).max(6).default([]),
+  /** Thẻ giá nổi ở nửa trên (0–3) */
+  priceTags: z.array(PriceTag).max(3).default([]),
+});
+
+/**
+ * HOOK COLLAGE — the opening "chia phần" card (@oncoinx2 style).
+ * Top ~62% of the frame is split into 2–3 image/video cells by gold seams;
+ * the bottom ~38% is a brand panel carrying badge + kicker + big headline +
+ * optional price tags. Cell media comes from the scene's `images` array
+ * (falls back to the single `image`).
+ */
+const HookCollageData = z.object({
+  template: z.literal("hook-collage"),
+  headline: z.string().min(1).max(120),
+  /** small uppercase line above the headline, e.g. "THỊ TRƯỜNG · 28/07" */
+  kicker: z.string().max(48).optional(),
+  badge: z.string().max(16).default("TIN NÓNG"),
+  /**
+   * Cell split geometry. `auto` picks by cell count:
+   * 2 → duo-diagonal, 3 → trio-stack.
+   */
+  layout: z.enum(["auto", "duo-diagonal", "duo-stack", "trio-stack", "trio-column"]).default("auto"),
+  /** tiny caption pinned inside each cell (index-matched to the images) */
+  cellLabels: z.array(z.string().max(28)).max(3).default([]),
+  /** words (case-insensitive) rendered in brand gold inside the headline */
+  highlight: z.array(z.string().max(30)).max(4).default([]),
+  /** floating price levels under the headline (0–3) */
+  priceTags: z.array(PriceTag).max(3).default([]),
+});
+
+/**
  * IMAGE — the workhorse body beat. A relevant photo/illustration shown
  * "contained" over its own blurred fill, with a gentle Ken Burns move. No
  * karaoke captions (matches @oncoinx2). Optional tiny lower label.
@@ -164,6 +244,8 @@ export const TemplateData = z.discriminatedUnion("template", [
   ChartData,
   OutroData,
   // MAI Crypto image-driven set:
+  HookSplitData,
+  HookCollageData,
   FinanceHookData,
   ImageSceneData,
   DocumentData,
@@ -200,6 +282,13 @@ const Scene = z.object({
   templateData: TemplateData,
   /** Per-scene image (URL, local path, or AI-generation prompt). @oncoinx2 style. */
   image: SceneImage.optional(),
+  /**
+   * Extra images for multi-cell templates (hook-collage). Index 0 = first cell.
+   * If omitted, the collage falls back to the single `image`.
+   */
+  images: z.array(SceneImage).max(3).optional(),
+  /** Per-scene video clip (direct src, or `query` → search related platforms). */
+  video: SceneVideo.optional(),
   /** Optional sound effect override (else pipeline picks per template) */
   sfx: SfxSpec.optional(),
 });

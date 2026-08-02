@@ -15,8 +15,12 @@ The pipeline defaults to `VIDEO_THEME=maicrypto`. In this mode the video is
 **image-driven and minimal** — matching the `@oncoinx2` channel:
 
 - Every beat shows a **relevant image** (blurred fill + Ken Burns) — NOT text cards.
-- The opening is a **finance-hook**: candlestick backdrop + drifting coins + a big
-  burned-in headline + price tags + a red badge.
+  A beat can also carry a real **video clip** (`video: { query }`) pulled from
+  related pages/stock and auto-normalised to the beat length.
+- The opening is a **hook-split** (mặc định): nửa trên là ảnh chủ đề với chủ thể
+  cắt rời tràn qua ranh giới, nửa dưới là nền tối + quầng sáng thương hiệu chứa
+  logo kênh cỡ lớn và CÂU TÓM TẮT in hoa. (`hook-collage` ghép 2–3 ảnh và
+  `finance-hook` nền nến vẫn dùng được.)
 - Only chrome: top-center **dynamic source credit** (`Tổng hợp bởi <source>`) and the
   sun logo + `MAI Crypto` wordmark. **No karaoke captions, no ticker.**
 - Closes on a sun-branded **outro** card.
@@ -24,11 +28,52 @@ The pipeline defaults to `VIDEO_THEME=maicrypto`. In this mode the video is
 **So when authoring `script.json` for this mode, use these templates and give each
 scene an `image` (a `prompt` to AI-generate, or a `src` URL/path):**
 
-| Scene | `type` | `templateData.template` | image? |
+| Scene | `type` | `templateData.template` | media |
 |---|---|---|---|
-| 1 (opening) | `hook` | `finance-hook` | optional subject |
-| 2…N (body) | `body` | `image` (default) or `document` | **yes** (prompt/URL) |
+| 1 (opening) | `hook` | **`hook-split`** (or `hook-collage` / `finance-hook`) | `image` = nền, `images[0]` = chủ thể cắt rời |
+| 2…N (body) | `body` | `image` (default) or `document` | **yes** (`image`; thêm `video` nếu muốn clip) |
 | last | `outro` | `brand-outro` | no |
+
+Opening shape (mặc định — hook-split):
+```json
+{ "id": "1", "type": "hook",
+  "voiceText": "…câu hook nói tiếng Việt…",
+  "templateData": {
+    "template": "hook-split",
+    "summary": "CÂU TÓM TẮT IN HOA, CÓ THỂ DÀI 1-3 DÒNG Ý",
+    "badge": "TIN NÓNG",
+    "kicker": "CHUYÊN MỤC · NGÀY",
+    "highlight": ["TỪ", "NHẤN"],
+    "priceTags": [{ "label": "BTC", "value": "89.420$", "tone": "down" }]
+  },
+  "image":  { "query": "english keywords for the background photo", "fit": "cover" },
+  "images": [{ "query": "english keywords for the cut-out subject", "fit": "contain" }] }
+```
+
+Opening shape (phương án 2 — collage):
+```json
+{ "id": "1", "type": "hook",
+  "voiceText": "…câu hook nói tiếng Việt…",
+  "templateData": {
+    "template": "hook-collage",
+    "badge": "TIN NÓNG",
+    "kicker": "THỊ TRƯỜNG · 24 GIỜ QUA",
+    "headline": "TIÊU ĐỀ IN HOA NGẮN GỌN",
+    "highlight": ["TỪ", "NHẤN"],
+    "cellLabels": ["Chú thích ô 1", "Chú thích ô 2", "Chú thích ô 3"],
+    "priceTags": [{ "label": "BTC", "value": "89.420$", "tone": "down" }]
+  },
+  "images": [
+    { "query": "english keywords for photo 1", "fit": "cover", "kenBurns": "zoom-in" },
+    { "query": "english keywords for photo 2", "fit": "cover", "kenBurns": "pan-right" },
+    { "query": "english keywords for photo 3", "fit": "cover", "kenBurns": "zoom-out" }
+  ] }
+```
+
+Beat có clip (tuỳ chọn, dùng cho 1–2 beat mạnh nhất):
+```json
+"video": { "query": "english keywords for the footage", "fit": "contain", "chip": "CLIP" }
+```
 
 Minimal per-scene shape:
 ```json
@@ -49,6 +94,49 @@ rules below STILL APPLY to every `voiceText`.
 > The older text-card look (comparison / stat-hero / feature-list / callout / chart +
 > karaoke captions + ticker) is still available via `VIDEO_THEME=broadcast` and is
 > what the rest of this document describes.
+
+### ⚠️ "fit": "cover" TRÊN ẢNH NGANG = MẤT CHỮ
+
+`cover` phóng ảnh lấp đầy khung 1080×1920 rồi CẮT. Ảnh ngang (ảnh báo, biểu đồ,
+logo, screenshot) mất 60–70% bề ngang — chữ trong ảnh đứt cả hai đầu.
+
+- Cảnh **body**: LUÔN để mặc định (`contain`). Đừng ghi `"fit": "cover"`.
+- Cảnh **hook**: `cover` OK **chỉ khi ảnh lấy từ `query`** (ảnh chụp thật,
+  không có chữ trong ảnh). Ảnh chụp cắt 68% bề ngang vẫn ra hình đẹp.
+- ⛔ **`"src"` (ảnh og của bài báo) thì BẮT BUỘC `contain`**, kể cả ở hook.
+  Ảnh og gần như luôn là title-card 16:9 có dòng tiêu đề NUNG SẴN trải hết bề
+  ngang — không khung cắt 9:16 nào giữ nổi. Riêng `hook-split` nghe tên tưởng
+  ảnh chỉ chiếm nửa trên, nhưng ảnh trải NGUYÊN khung, panel chữ chỉ phủ từ
+  `splitAt` (~0.51) xuống nên nửa trên là ảnh trần, cắt bao nhiêu thấy hết.
+
+Pipeline tự chuyển cover-ảnh-ngang về `contain` và `log.warn` (áp dụng cho
+body, và cho hook-split khi ảnh đến từ `src`), nhưng viết đúng từ đầu vẫn hơn.
+
+### 🚨 ĐỌC KỸ TRƯỚC KHI DÙNG PHẦN CÒN LẠI CỦA TÀI LIỆU NÀY
+
+`VIDEO_THEME` mặc định là **`maicrypto`**, và `.env` hiện KHÔNG đặt biến này —
+nghĩa là mọi lần chạy đều là maicrypto. Trong theme đó, `maicrypto-composer.ts`
+CHỈ vẽ riêng 6 template:
+
+    hook-split · hook-collage · finance-hook · image · document · brand-outro
+
+Mọi template khác rơi vào nhánh fallback. JSON vẫn hợp lệ, pipeline KHÔNG báo
+lỗi, nhưng hình ra không phải thứ tài liệu này mô tả:
+
+| Template | Thực tế trong theme maicrypto |
+|---|---|
+| `stat-hero` | → ảnh + headline `"value — label"`. Trường `context` **bị bỏ** |
+| `callout` | → ảnh + headline = `statement`. Trường `tag` **bị bỏ** |
+| `comparison` | → nhánh `default:` → ảnh **KHÔNG có chữ nào**. Dữ liệu **mất sạch** |
+| `chart` | → không có layout riêng; `points` không được vẽ |
+| `feature-list` | → không có layout riêng; các `bullets` không hiện |
+
+⇒ Muốn một con số lớn hay một câu trích dẫn trong theme maicrypto: dùng
+`{"template":"image","headline":"..."}`. Nó cho đúng kết quả đó và không âm thầm
+nuốt mất trường nào.
+
+⇒ Các mục bên dưới mô tả template `chart`, `stat-hero`, `ticker`, karaoke
+captions… CHỈ đúng khi bạn đặt `VIDEO_THEME=broadcast` trong `.env`.
 
 ---
 
@@ -100,6 +188,82 @@ Following the schema in `docs/superpowers/specs/2026-04-29-auto-news-video-desig
 - Number of scenes: **5–8** (1 hook + 3–6 body + 1 outro)
 - Each scene voiceText is 1-3 short sentences, văn nói (spoken style, not formal)
 - No emoji, no markdown in voiceText
+
+**⏱ OUTRO CHỈ ĐƯỢC CHỨA CÂU KÊU GỌI — KHÔNG BAO GIỜ CHỨA NỘI DUNG TIN.**
+
+Thời lượng mỗi scene = ĐÚNG độ dài giọng đọc của scene đó. Thẻ outro là hình
+tĩnh (logo + tên kênh), nên mỗi giây lời thoại thừa trong outro là một giây khán
+giả nhìn logo đứng yên — cảm giác video đã hết mà vẫn còn người nói.
+
+- `voiceText` của outro: **tối đa ~12 từ**, chỉ một câu CTA.
+  > ✓ "Theo dõi MAI CRYPTO để không bỏ lỡ tin nóng mỗi ngày."
+  > ✗ "Hồi tháng Năm, toà bác đơn kiện 150 tỷ đô… Theo dõi MAI CRYPTO." ← 9 giây logo đứng hình
+
+- Còn dữ kiện chưa nói hết? **Thêm scene body** có `image` hoặc `video`, đừng dồn
+  vào outro. Schema cho tới 12 scene — cứ dùng. Nói hết nội dung rồi mới sang outro.
+
+Pipeline sẽ `log.warn` nếu giọng đọc outro vượt 6 giây.
+
+### 🎭 VĂN PHONG: hài hước kiểu Việt (BẮT BUỘC cho mọi `voiceText`)
+
+Tham chiếu: kênh TikTok **@geoscope22**. Giọng ở đây KHÔNG phải meme Gen-Z,
+cũng không phải dí dỏm nhẹ nhàng — mà là **cà khịa + chơi chữ thành ngữ Việt**.
+
+**Bốn kỹ thuật lấy từ kênh tham chiếu:**
+
+1. **Mở bằng vế đùa, rồi mới tới tin.** Vế đầu là cú móc, vế sau là dữ kiện.
+   > "Bố gây chiến, con vào lệnh: Barron Trump lãi gần ba tỷ đô từ dầu mỏ."
+
+2. **Chơi chữ với thành ngữ / tục ngữ / tên tác phẩm quen thuộc.**
+   > "Tắt đèn của Ngô Tất Tố" (cho tin cắt điện) · "nghịch ngu có thưởng"
+   > · "úp bô" · "sờ gáy" · "gậy ông đập lưng ông" · "già néo đứt dây"
+
+3. **Nói giảm mỉa mai, bỏ lửng.** Sức nặng nằm ở chỗ không nói ra.
+   > "…và sau đó thì, à mà thôi, không còn sau đó nữa."
+
+4. **Từ dân dã thay từ báo chí.** "bốc hơi" thay "sụt giảm", "ôm hàng" thay
+   "nắm giữ", "gồng lỗ" thay "chịu thua lỗ", "toang" thay "thất bại".
+
+**Liều lượng — quan trọng hơn kỹ thuật:**
+
+- **Tối đa MỘT cú đùa mỗi scene.** Đùa liên tục thì nhàm và chôn mất tin.
+- **Hook và outro gánh phần hài.** Các scene giữa mang số liệu nặng thì viết
+  rõ ràng — người xem cần hiểu con số, không cần cười thêm lần nữa.
+- Nếu tin có người chết, thiên tai, hoặc nạn nhân cụ thể → **bỏ hài, viết thẳng.**
+
+**Ba lằn ranh KHÔNG được vượt:**
+
+1. **Không bịa lời thoại gán cho người thật.** Chỉ dùng phát ngôn có trong bài.
+   Đây là ranh giới giữa cà khịa và vu khống.
+2. **Không đùa lên ngoại hình, gia đình, đời tư.** Cà khịa vào *hành động và
+   logic* của nhân vật, không vào con người họ.
+3. **Số liệu tuyệt đối không được bẻ cong để câu đùa đắt hơn.** Nếu câu đùa chỉ
+   hay khi làm tròn 63,4 thành 60 thì bỏ câu đùa, giữ con số.
+
+**Phạm vi:** hài chỉ nằm ở `voiceText`. Chữ trên màn hình (`summary`,
+`headline`, `label`) giữ nghiêm túc, đúng số liệu. Tương phản giữa lời đọc tếu
+và chữ hiện nghiêm khiến câu đùa đắt hơn, đồng thời giữ được độ tin cậy.
+
+**Ví dụ — cùng một dữ kiện:**
+
+```
+✗ Khô (trước):
+  "Strategy đã năm tuần liên tiếp không mua Bitcoin, thay vào đó tăng dự trữ
+   tiền mặt lên ba phẩy bảy lăm tỷ đô."
+
+✓ Có giọng:
+  "Năm tuần rồi, ví của Saylor vẫn im như thóc. Tiền thì vẫn về, ba phẩy bảy
+   lăm tỷ đô nằm đó, mà Bitcoin thì không thấy mua thêm đồng nào."
+```
+
+```
+✗ Quá đà (bịa số cho vui, gán ý nghĩ cho người thật):
+  "Saylor giờ chắc đang ôm mặt khóc vì lỗ chục tỷ đô."
+
+✓ Đúng liều (cà khịa vào logic, số liệu giữ nguyên):
+  "Bán cổ phiếu của mình, để mua lại cổ phiếu của mình. Logic thì hơi vòng,
+   nhưng kho Bitcoin vẫn đang âm tám phẩy năm tỷ đô."
+```
 
 ### ⚠️ CRITICAL: Vietnamese TTS Phonetic Rules
 
@@ -164,7 +328,7 @@ RIGHT (natural):
 {
   "voiceText": "GPT năm chấm năm đạt tám mươi hai phẩy bảy phần trăm.",
   "templateData": {
-    "template": "stat-hero",
+    "template": "stat-hero",        ← chỉ hoạt động khi VIDEO_THEME=broadcast
     "value": "82.7%",                 ← Visual: keep readable formatting
     "label": "Terminal-Bench"
   }
@@ -188,7 +352,8 @@ bán tháo...) and positive words (tăng, kỷ lục, lập đỉnh...) auto-hig
 gold/red/green. Sentence punctuation controls caption line breaks — end sentences
 with `.` or `?` and keep sentences short.
 
-**`chart` template (NEW — best template for crypto/price stories):**
+**`chart` template — ⚠ CHỈ VẼ ĐƯỢC KHI `VIDEO_THEME=broadcast`.**
+Theme mặc định (maicrypto) không có layout cho nó; `points` sẽ không hiện.
 Use for any price action, market move, or metric-over-time. An animated neon
 line chart draws itself, with a pulsing endpoint and a stamped change badge.
 
@@ -206,9 +371,11 @@ line chart draws itself, with a pulsing endpoint and a stamped change badge.
   }
 }
 ```
-- `points`: 4–60 raw numbers left→right (renderer normalizes scale). Use real
-  values from the article when available; otherwise a plausible shape matching
-  the story (e.g. steady decline for a crash story).
+- `points`: 4–60 raw numbers left→right (renderer normalizes scale).
+  ⛔ **CHỈ dùng số liệu CÓ THẬT trong bài.** Không có đủ dãy số thì BỎ cảnh chart,
+  đừng "vẽ một hình dạng hợp lý cho khớp câu chuyện" — đây là video tin tức, một
+  biểu đồ giá tự chế là số liệu bịa, dù nhìn có vẻ vô hại.
+  Bài chỉ cho một hai mốc giá? Dùng `image` + `headline` ghi đúng hai mốc đó.
 - `trend`: `"down"` → red scheme, `"up"` → cyan/green scheme.
 - `changeText`: short stamp near the line end ("-52%", "126,080$").
 - Rule of thumb: if the story has price movement, include EXACTLY ONE chart scene.

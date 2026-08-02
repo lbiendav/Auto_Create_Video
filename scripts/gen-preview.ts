@@ -13,7 +13,7 @@ import { readFileSync, mkdirSync, copyFileSync, writeFileSync, existsSync } from
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ScriptSchema } from "../src/render/script-schema.js";
-import { composeHtmlMaiCrypto, type SceneImageResolved } from "../src/render/maicrypto-composer.js";
+import { composeHtmlMaiCrypto, type SceneImageResolved, type SceneVideoResolved } from "../src/render/maicrypto-composer.js";
 import type { BrandConfig } from "../src/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,8 +27,8 @@ mkdirSync(OUT, { recursive: true });
 const script = ScriptSchema.parse(JSON.parse(readFileSync(scriptPath, "utf8")));
 
 const brand: BrandConfig = {
-  name: "MAI Crypto",
-  handle: "@maicrypto",
+  name: process.env.BRAND_NAME ?? "MAI CRYPTO",
+  handle: process.env.BRAND_HANDLE ?? "@maicrypto.media",
   logoFile: "avatar.png",
   creditPrefix: "Tổng hợp bởi",
 };
@@ -57,6 +57,38 @@ for (const s of script.scenes) {
   sceneImages[s.id] = { image: url, blur: url, fit, kb };
 }
 
+// Collage cells (hook-collage) — same placeholder strategy, one image per cell
+const sceneCollageImages: Record<string, SceneImageResolved[]> = {};
+for (const s of script.scenes) {
+  if (!s.images?.length) continue;
+  sceneCollageImages[s.id] = s.images.map((spec, i) => {
+    const url = spec.src ?? (spec.prompt ? poll(spec.prompt, `mai-${s.id}-c${i}`) : pic(`mai-${s.id}-c${i}`));
+    return {
+      image: url,
+      blur: url,
+      fit: (spec.fit as any) ?? "cover",
+      kb: (spec.kenBurns as any) ?? "zoom-in",
+    };
+  });
+}
+
+// Video beats — the preview has no ffmpeg step, so a scene declaring `video`
+// falls back to its poster still unless a local file is already present.
+const sceneVideos: Record<string, SceneVideoResolved> = {};
+for (const s of script.scenes) {
+  if (!s.video) continue;
+  const local = join(dirname(scriptPath), "videos", `scene-${s.id}.mp4`);
+  if (!existsSync(local)) continue;
+  sceneVideos[s.id] = {
+    video: `videos/scene-${s.id}.mp4`,
+    poster: existsSync(join(dirname(scriptPath), "videos", `scene-${s.id}.jpg`))
+      ? `videos/scene-${s.id}.jpg`
+      : null,
+    chip: s.video.chip,
+    fit: (s.video.fit as any) ?? "contain",
+  };
+}
+
 let html = composeHtmlMaiCrypto({
   script,
   sceneAudio,
@@ -67,6 +99,8 @@ let html = composeHtmlMaiCrypto({
   logoRelPath: "logo.png",
   outroHoldSec: 1.2,
   sceneImages,
+  sceneCollageImages,
+  sceneVideos,
 });
 
 // Remove the silent <audio> (no voice.mp3 in preview) and autoplay+loop the timeline.
